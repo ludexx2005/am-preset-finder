@@ -1,0 +1,6 @@
+{
+  "name": "AM Preset Finder",
+  "description": "Deteksi dan ekstrak link preset Alight Motion (5MB & XML) serta kode QR dari video TikTok, Instagram, YouTube, komentar, dan gambar screenshot.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
