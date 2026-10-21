@@ -51,9 +51,20 @@ export default async function handler(req, res) {
     if (!response.ok) {
       return res.status(response.status).json({ error: data.error?.message || "Gagal memanggil Gemini API" });
     }
+const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return res.status(200).json({ data: textResult });
+  return res.status(200).json({
+    data: {
+      items: [
+        {
+          id: "gemini-result-1",
+          title: "Hasil Pencarian Preset AI",
+          caption: textResult,
+          sourceUrl: ""
+        }
+      ]
+    }
+  });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
