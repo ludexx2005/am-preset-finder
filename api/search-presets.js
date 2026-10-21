@@ -38,7 +38,7 @@ export default async function handler(req, res) {
           {
             parts: [
               {
-               text: `Berikan 3 rekomendasi preset Alight Motion terkait kata kunci: "${q}". Wajib sertakan contoh link preset https://alight.link/preset dan link XML https://drive.google.com/file/d/sample di setiap rekomendasi.`
+               text: `Berikan 5 rekomendasi preset Alight Motion terkait kata kunci: "${q}". Wajib sertakan contoh link preset https://alight.link/preset dan link XML https://drive.google.com/file/d/sample di setiap rekomendasi.`
               }
             ]
           }
