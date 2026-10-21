@@ -1,5 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -27,15 +25,34 @@ export default async function handler(req, res) {
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: `Berikan rekomendasi preset Alight Motion terkait kata kunci: "${q}". Sertakan nama preset, gaya edit, dan deskripsi singkat secara rapi.`
+              }
+            ]
+          }
+        ]
+      })
+    });
 
-    const prompt = `Berikan rekomendasi preset Alight Motion terkait kata kunci: "${q}". Sertakan nama preset, gaya edit, dan deskripsi singkat. Format jawaban dalam format JSON yang rapi atau daftar teks ringkas.`;
+    const data = await response.json();
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    if (!response.ok) {
+      return res.status(response.status).json({ error: data.error?.message || "Gagal memanggil Gemini API" });
+    }
 
-    return res.status(200).json({ data: text });
+    const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    return res.status(200).json({ data: textResult });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
