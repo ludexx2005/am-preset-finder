@@ -25,19 +25,20 @@ export default async function handler(req, res) {
   }
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`;
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      },
+        'x-goog-api-key': apiKey
+     },
       body: JSON.stringify({
         contents: [
           {
             parts: [
               {
-                text: `Berikan rekomendasi preset Alight Motion terkait kata kunci: "${q}". Sertakan nama preset, gaya edit, dan deskripsi singkat secara rapi.`
+                text: `Berikan rekomendasi preset Alight Motion terkait kata kunci: "${q}".`
               }
             ]
           }
