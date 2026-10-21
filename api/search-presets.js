@@ -34,11 +34,16 @@ export default async function handler(req, res) {
         'x-goog-api-key': apiKey
      },
       body: JSON.stringify({
+        tools: [
+          {
+            googleSearch: {}
+          }
+        ],
         contents: [
           {
             parts: [
               {
-               text: `Berikan 5 rekomendasi preset Alight Motion terkait kata kunci: "${q}". Wajib sertakan contoh link preset https://alight.link/preset dan link XML https://drive.google.com/file/d/sample di setiap rekomendasi.`
+                text: `Cari di internet link preset Alight Motion asli (alight.link, alightcreative.com, atau drive.google.com) yang valid dan aktif untuk kata kunci: "${q}". Wajib tampilkan URL lengkapnya beserta judul presetnya.`
               }
             ]
           }
