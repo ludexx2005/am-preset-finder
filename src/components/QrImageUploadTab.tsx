@@ -18,6 +18,8 @@ import {
   extractUrlParametersList,
   resolveRealRedirectUrl,
 } from '../utils/presetParser';
+import { CardCornerWatermark } from './AmLogoWatermark';
+import { liquidPointerHandlers } from '../utils/liquidGlass';
 
 interface QrImageUploadTabProps {
   onQrImageExtracted: (info: {
@@ -184,19 +186,23 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
 
   return (
     <div className="space-y-6" onPaste={handlePaste}>
-      {/* Upload Box & Instructions (Penunjuk) */}
-      <div className="glass-panel rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5">
+      {/* Upload Box & Instructions with Bottom-Right Watermark */}
+      <div
+        {...liquidPointerHandlers}
+        className="glass-panel rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-hidden"
+      >
+        <CardCornerWatermark />
+
         <div
+          {...liquidPointerHandlers}
           onDragOver={(e) => {
             e.preventDefault();
             setIsDragging(true);
           }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          className={`rounded-xl p-5 sm:p-8 bg-slate-950/60 border border-dashed transition-colors flex flex-col items-center justify-center text-center min-h-[200px] sm:min-h-[240px] ${
-            isDragging
-              ? 'border-[#00E5A3] bg-[#00E5A3]/10'
-              : 'border-white/15 hover:border-[#00E5A3]/50'
+          className={`relative z-10 glass-subpanel rounded-xl p-5 sm:p-8 flex flex-col items-center justify-center text-center min-h-[200px] sm:min-h-[240px] ${
+            isDragging ? 'ring-2 ring-[#38bdf8]' : ''
           }`}
         >
           <input
@@ -208,33 +214,35 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
             className="sr-only"
           />
 
-          <div className="w-11 h-11 rounded-xl bg-[#00E5A3]/15 border border-[#00E5A3]/30 flex items-center justify-center text-[#00E5A3] mb-3">
+          <div className="w-11 h-11 rounded-xl glass-subpanel flex items-center justify-center text-[#2dd4bf] mb-3">
             <Upload className="w-5 h-5" aria-hidden="true" />
           </div>
 
-          <h3 className="text-sm sm:text-base font-semibold text-white">
+          <h3 className="text-sm sm:text-base font-semibold text-[#f1f5f9]">
             Unggah atau Tarik Screenshot QR Alight Motion
           </h3>
-          <p className="text-xs text-slate-400 max-w-md mt-1 mb-4 leading-relaxed">
+          <p className="text-xs text-[#94a3b8] max-w-md mt-1 mb-4 leading-relaxed">
             Pilih gambar tangkapan layar kode QR dari galeri untuk mengekstrak tautan{' '}
-            <code className="text-[#00E5A3]">alight.link</code> dan mengubahnya ke format tujuan{' '}
-            <code className="text-[#00E5A3]">alightcreative.com</code>.
+            <code className="text-[#2dd4bf]">alight.link</code> dan mengubahnya ke format tujuan{' '}
+            <code className="text-[#38bdf8]">alightcreative.com</code>.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-2.5">
             <label
               htmlFor="qr-image-upload-input"
-              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#00E5A3] text-slate-950 font-semibold text-xs sm:text-sm hover:bg-[#00cca0] transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+              {...liquidPointerHandlers}
+              className="liquid-btn-primary min-h-[44px] px-5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm active:scale-95 flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
             >
-              <ImageIcon className="w-4 h-4" aria-hidden="true" />
+              <ImageIcon className="w-4 h-4 text-[#2dd4bf]" aria-hidden="true" />
               <span>Pilih & Cari QR dari Gambar</span>
             </label>
 
             {hasResultOrActivity && (
               <button
                 type="button"
+                {...liquidPointerHandlers}
                 onClick={handleReset}
-                className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                className="liquid-btn-secondary min-h-[44px] px-3.5 py-2.5 rounded-xl active:scale-95 text-xs font-medium flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
               >
                 <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Sembunyikan & Reset</span>
@@ -243,46 +251,59 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
           </div>
         </div>
 
-        {/* Penunjuk Penggunaan Scan Gambar QR — Flexible 3-Column Grid on Mobile */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-1">
-          <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950/50 border border-white/[0.06] space-y-1 text-center sm:text-left">
-            <div className="text-[11px] sm:text-xs font-semibold text-[#00E5A3]">
+        {/* Penunjuk Penggunaan Scan Gambar QR */}
+        <div className="relative z-10 grid grid-cols-3 gap-2 sm:gap-3 pt-1">
+          <div
+            {...liquidPointerHandlers}
+            className="glass-subpanel p-2.5 sm:p-3.5 rounded-xl space-y-1 text-center sm:text-left"
+          >
+            <div className="text-[11px] sm:text-xs font-semibold text-[#2dd4bf]">
               1. Siapkan QR
             </div>
-            <p className="hidden sm:block text-xs text-slate-400 leading-relaxed">
+            <p className="hidden sm:block text-xs text-[#94a3b8] leading-relaxed">
               Ambil tangkapan layar kode QR preset Alight Motion dari video TikTok, Instagram, atau YouTube.
             </p>
           </div>
-          <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950/50 border border-white/[0.06] space-y-1 text-center sm:text-left">
-            <div className="text-[11px] sm:text-xs font-semibold text-[#00E5A3]">
+          <div
+            {...liquidPointerHandlers}
+            className="glass-subpanel p-2.5 sm:p-3.5 rounded-xl space-y-1 text-center sm:text-left"
+          >
+            <div className="text-[11px] sm:text-xs font-semibold text-[#38bdf8]">
               2. Pilih Gambar
             </div>
-            <p className="hidden sm:block text-xs text-slate-400 leading-relaxed">
-              Klik tombol <strong>Pilih & Cari QR dari Gambar</strong> atau tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-900 border border-white/10 font-mono text-[11px] text-slate-300">Ctrl+V</kbd>.
+            <p className="hidden sm:block text-xs text-[#94a3b8] leading-relaxed">
+              Klik tombol <strong className="text-[#f1f5f9]">Pilih & Cari QR dari Gambar</strong> atau tekan <kbd className="px-1.5 py-0.5 rounded bg-[#0b0c0e]/70 font-mono text-[11px] text-[#f1f5f9]">Ctrl+V</kbd>.
             </p>
           </div>
-          <div className="p-2.5 sm:p-3.5 rounded-xl bg-slate-950/50 border border-white/[0.06] space-y-1 text-center sm:text-left">
-            <div className="text-[11px] sm:text-xs font-semibold text-[#00E5A3]">
+          <div
+            {...liquidPointerHandlers}
+            className="glass-subpanel p-2.5 sm:p-3.5 rounded-xl space-y-1 text-center sm:text-left"
+          >
+            <div className="text-[11px] sm:text-xs font-semibold text-[#10b981]">
               3. Buka Preset
             </div>
-            <p className="hidden sm:block text-xs text-slate-400 leading-relaxed">
+            <p className="hidden sm:block text-xs text-[#94a3b8] leading-relaxed">
               Hasil ekstraksi URL utuh baru ditampilkan secara otomatis setelah gambar QR dipindai.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Decoded Result & Annotated Preview (Hidden automatically until an image is scanned) */}
+      {/* Decoded Result & Annotated Preview */}
       {hasResultOrActivity && (
-        <div className="glass-panel rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div
+          {...liquidPointerHandlers}
+          className="glass-panel rounded-2xl p-6 space-y-4 overflow-hidden"
+        >
+          <CardCornerWatermark />
+          <div className="relative z-10 flex items-center justify-between border-b border-white/[0.08] pb-3">
             <div className="flex items-center gap-2">
-              <QrCode className="w-4 h-4 text-[#00E5A3]" aria-hidden="true" />
-              <span className="text-sm font-semibold text-white">
+              <QrCode className="w-4 h-4 text-[#2dd4bf]" aria-hidden="true" />
+              <span className="text-sm font-semibold text-[#f1f5f9]">
                 Hasil Pencarian & Dekode Kode QR
               </span>
             </div>
-            <span className="text-xs font-mono tabular-nums text-[#00E5A3]">
+            <span className="text-xs font-mono tabular-nums text-[#2dd4bf]">
               {isScanning
                 ? 'Memindai piksel...'
                 : detection
@@ -294,7 +315,7 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
           {errorMsg && (
             <div
               role="alert"
-              className="p-3.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs flex items-start gap-2.5"
+              className="relative z-10 p-3.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs flex items-start gap-2.5"
             >
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" aria-hidden="true" />
               <span>{errorMsg}</span>
@@ -302,8 +323,8 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
           )}
 
           {previewUrl && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start min-w-0">
-              <div className="lg:col-span-5 min-w-0 relative rounded-xl overflow-hidden bg-slate-950 border border-white/10 flex items-center justify-center p-3">
+            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start min-w-0">
+              <div className="lg:col-span-5 min-w-0 relative rounded-xl overflow-hidden bg-[#0b0c0e]/85 border border-white/[0.08] flex items-center justify-center p-3">
                 <img
                   src={previewUrl}
                   alt={fileName || 'Pratinjau screenshot QR Alight Motion'}
@@ -315,10 +336,10 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
               {detection && (
                 <div className="lg:col-span-7 min-w-0 max-w-full overflow-hidden space-y-3">
                   {/* 1. Raw Exact URL from QR */}
-                  <div className="p-3.5 rounded-xl bg-slate-950/85 border border-white/15 space-y-2 min-w-0 max-w-full overflow-hidden">
-                    <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-slate-400">
+                  <div className="glass-subpanel p-3.5 rounded-xl space-y-2 min-w-0 max-w-full overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-1 text-xs text-[#94a3b8]">
                       <span>Teks URL Asli di Dalam QR Code (Utuh):</span>
-                      <span className="font-mono tabular-nums text-slate-300">
+                      <span className="font-mono tabular-nums text-[#38bdf8]">
                         {detection.rawPayload.length} karakter
                       </span>
                     </div>
@@ -327,27 +348,28 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
                       href={detection.rawPayload}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="url-wrap-box block w-full p-2.5 rounded-lg bg-slate-900/95 border border-white/10 font-mono text-xs font-medium text-white hover:text-[#00E5A3] hover:border-[#00E5A3]/40 transition-colors leading-relaxed select-all"
+                      className="url-wrap-box block w-full p-2.5 rounded-lg bg-[#0b0c0e]/70 font-mono text-xs font-medium text-[#f1f5f9] hover:text-[#2dd4bf] transition-colors leading-relaxed select-all"
                     >
                       {detection.rawPayload}
                     </a>
                   </div>
 
-                  {/* 2. Resolved alightcreative.com/am/share/u/.../p/... URL if shortlink */}
+                  {/* 2. Resolved alightcreative.com URL if shortlink */}
                   {detection.isAlightShortlink && (
-                    <div className="p-3.5 rounded-xl bg-slate-950/85 border border-[#00E5A3]/35 space-y-2 min-w-0 max-w-full overflow-hidden">
+                    <div className="glass-subpanel p-3.5 rounded-xl space-y-2 min-w-0 max-w-full overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs min-w-0">
-                        <span className="text-slate-200 font-medium flex items-center gap-1 min-w-0">
-                          <ArrowRight className="w-3.5 h-3.5 text-[#00E5A3] shrink-0" aria-hidden="true" />
-                          <span className="truncate">URL Tujuan (`alightcreative.com`):</span>
+                        <span className="text-[#f1f5f9] font-medium flex items-center gap-1 min-w-0">
+                          <ArrowRight className="w-3.5 h-3.5 text-[#2dd4bf] shrink-0" aria-hidden="true" />
+                          <span className="truncate">URL Tujuan (alightcreative.com):</span>
                         </span>
                         <button
                           type="button"
+                          {...liquidPointerHandlers}
                           onClick={() =>
                             resolveShortlinkIfNeeded(detection, fileName)
                           }
                           disabled={isResolvingAlight}
-                          className="text-[11px] font-semibold text-[#00E5A3] hover:underline flex items-center gap-1 shrink-0 cursor-pointer"
+                          className="text-[11px] font-semibold text-[#2dd4bf] hover:underline active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer"
                         >
                           <RefreshCw
                             className={`w-3 h-3 ${isResolvingAlight ? 'animate-spin' : ''}`}
@@ -364,12 +386,12 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
                           href={detection.resolvedAlightCreativeUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="url-wrap-box block w-full p-2.5 rounded-lg bg-slate-900/95 border border-[#00E5A3]/30 font-mono text-xs font-semibold text-[#00E5A3] hover:underline leading-relaxed select-all"
+                          className="url-wrap-box block w-full p-2.5 rounded-lg bg-[#0b0c0e]/70 font-mono text-xs font-semibold text-[#2dd4bf] hover:underline leading-relaxed select-all"
                         >
                           {detection.resolvedAlightCreativeUrl}
                         </a>
                       ) : (
-                        <p className="text-xs text-slate-400 leading-relaxed url-wrap-box">
+                        <p className="text-xs text-[#94a3b8] leading-relaxed url-wrap-box">
                           {isResolvingAlight
                             ? 'Sedang meresolve shortlink alight.link ke https://alightcreative.com/am/share/u/.../p/...'
                             : 'Tidak ditemukan redirect ke alightcreative.com/am/share/. Gunakan URL asli QR di atas.'}
@@ -379,13 +401,13 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
                   )}
 
                   {detectedParams.length > 0 && (
-                    <div className="text-[11px] text-slate-400 font-mono flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 min-w-0 max-w-full overflow-hidden">
-                      <span className="text-slate-300 font-sans">Parameter Utuh:</span>
+                    <div className="text-[11px] text-[#94a3b8] font-mono flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 min-w-0 max-w-full overflow-hidden">
+                      <span className="text-[#f1f5f9] font-sans">Parameter Utuh:</span>
                       {detectedParams.map((p, idx) => (
                         <React.Fragment key={`imgqr-param-${p.key}-${idx}`}>
                           {idx > 0 && <span aria-hidden="true">·</span>}
                           <span className="url-wrap-box">
-                            {p.key}=<span className="text-[#00E5A3]">{p.value}</span>
+                            {p.key}=<span className="text-[#2dd4bf]">{p.value}</span>
                           </span>
                         </React.Fragment>
                       ))}
@@ -398,22 +420,24 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
                         href={activeTargetUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 min-w-0 px-4 py-2.5 rounded-lg bg-[#00E5A3] text-slate-950 hover:bg-[#00cca0] font-semibold text-xs text-center transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"
+                        {...liquidPointerHandlers}
+                        className="liquid-btn-primary flex-1 min-w-0 px-4 py-2.5 rounded-xl active:scale-95 font-semibold text-xs text-center flex items-center justify-center gap-1.5 whitespace-nowrap"
                       >
-                        <Sparkles className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        <Sparkles className="w-3.5 h-3.5 text-[#2dd4bf] shrink-0" aria-hidden="true" />
                         <span className="truncate">Buka di Alight Motion</span>
-                        <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        <ExternalLink className="w-3.5 h-3.5 text-[#38bdf8] shrink-0" aria-hidden="true" />
                       </a>
 
                       <button
                         type="button"
+                        {...liquidPointerHandlers}
                         onClick={() => handleCopyUrl('raw', detection.rawPayload)}
-                        className="px-3.5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                        className="liquid-btn-secondary px-3.5 py-2.5 rounded-xl active:scale-95 font-medium text-xs flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         {copiedType === 'raw' ? (
                           <>
-                            <Check className="w-3.5 h-3.5 text-[#00E5A3] shrink-0" aria-hidden="true" />
-                            <span className="text-[#00E5A3] font-semibold">URL Asli Tersalin</span>
+                            <Check className="w-3.5 h-3.5 text-[#10b981] shrink-0" aria-hidden="true" />
+                            <span className="text-[#2dd4bf] font-semibold">URL Asli Tersalin</span>
                           </>
                         ) : (
                           <>
@@ -427,14 +451,15 @@ export const QrImageUploadTab: React.FC<QrImageUploadTabProps> = ({
                     {detection.resolvedAlightCreativeUrl && (
                       <button
                         type="button"
+                        {...liquidPointerHandlers}
                         onClick={() =>
                           handleCopyUrl('resolved', detection.resolvedAlightCreativeUrl!)
                         }
-                        className="w-full min-w-0 px-3 py-2 rounded-lg bg-[#00E5A3]/15 hover:bg-[#00E5A3]/25 border border-[#00E5A3]/40 text-[#00E5A3] font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="liquid-btn-secondary w-full min-w-0 px-3 py-2 rounded-xl active:scale-95 text-[#2dd4bf] font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         {copiedType === 'resolved' ? (
                           <>
-                            <Check className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                            <Check className="w-3.5 h-3.5 text-[#10b981] shrink-0" aria-hidden="true" />
                             <span className="truncate">URL alightcreative.com Tersalin Utuh</span>
                           </>
                         ) : (

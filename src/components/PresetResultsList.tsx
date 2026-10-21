@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ExternalLink,
   Copy,
@@ -16,6 +16,8 @@ import {
   extractUrlParametersList,
 } from '../utils/presetParser';
 import { copyFullUrlToClipboard } from '../utils/clipboard';
+import { CardCornerWatermark } from './AmLogoWatermark';
+import { liquidPointerHandlers } from '../utils/liquidGlass';
 
 interface PresetResultsListProps {
   links: ExtractedPresetLink[];
@@ -26,11 +28,20 @@ interface PresetResultsListProps {
   ) => void;
 }
 
+const FILTER_ORDER: Array<'all' | PresetLinkCategory> = [
+  'all',
+  '5mb',
+  'xml',
+  'shortlink',
+];
+
 export const PresetResultsList: React.FC<PresetResultsListProps> = ({
   links,
   onLinkResolved,
 }) => {
   const [activeFilter, setActiveFilter] = useState<'all' | PresetLinkCategory>('all');
+  const [isSlidingFilter, setIsSlidingFilter] = useState<boolean>(false);
+  const filterTimerRef = useRef<number | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lastCopiedFullUrl, setLastCopiedFullUrl] = useState<string | null>(null);
   const [resolvingMap, setResolvingMap] = useState<Record<string, boolean>>({});
@@ -53,6 +64,25 @@ export const PresetResultsList: React.FC<PresetResultsListProps> = ({
 
   const filteredLinks =
     activeFilter === 'all' ? links : links.filter((l) => l.category === activeFilter);
+
+  const handleSelectFilter = (next: 'all' | PresetLinkCategory) => {
+    setIsSlidingFilter(true);
+    if (filterTimerRef.current !== null) {
+      window.clearTimeout(filterTimerRef.current);
+    }
+    filterTimerRef.current = window.setTimeout(() => {
+      setIsSlidingFilter(false);
+    }, 300);
+    setActiveFilter(next);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (filterTimerRef.current !== null) {
+        window.clearTimeout(filterTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = async (id: string, urlToCopy: string) => {
     await copyFullUrlToClipboard(urlToCopy);
@@ -107,56 +137,83 @@ export const PresetResultsList: React.FC<PresetResultsListProps> = ({
 
   if (links.length === 0) {
     return (
-      <div className="glass-panel rounded-2xl p-6 text-center space-y-1.5">
-        <p className="text-sm font-medium text-slate-200">
+      <div
+        {...liquidPointerHandlers}
+        className="glass-panel rounded-2xl p-6 text-center space-y-1.5 overflow-hidden"
+      >
+        <CardCornerWatermark />
+        <p className="relative z-10 text-sm font-medium text-[#f1f5f9]">
           Belum ada tautan preset tertulis pada deskripsi/caption atau komentar yang dipindai.
         </p>
-        <p className="text-xs text-slate-400 max-w-lg mx-auto">
-          Periksa panel komentar di bawah, gunakan <strong>Auto Video QR Scanner</strong>, atau unggah tangkapan layar kode QR pada tab <strong>Scan Gambar QR</strong>.
+        <p className="relative z-10 text-xs text-[#94a3b8] max-w-lg mx-auto">
+          Periksa panel komentar di bawah, gunakan <strong className="text-[#f1f5f9]">Auto Video QR Scanner</strong>, atau unggah tangkapan layar kode QR pada tab <strong className="text-[#f1f5f9]">Scan Gambar QR</strong>.
         </p>
       </div>
     );
   }
 
+  const activeFilterIdx = Math.max(0, FILTER_ORDER.indexOf(activeFilter));
+
   return (
-    <div className="glass-panel rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-white/[0.08] pb-3.5 sm:pb-4">
+    <div
+      {...liquidPointerHandlers}
+      className="glass-panel rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-hidden"
+    >
+      <CardCornerWatermark />
+
+      <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-white/[0.08] pb-3.5 sm:pb-4">
         <div className="space-y-1">
-          <h3 className="text-sm sm:text-base font-semibold text-white">
+          <h3 className="text-sm sm:text-base font-semibold text-[#f1f5f9]">
             Tautan Preset Ditemukan ({links.length})
           </h3>
-          <div className="flex items-center gap-2 text-xs text-slate-400 font-mono tabular-nums">
-            <span>5MB: {count5mb}</span>
+          <div className="flex items-center gap-2 text-xs text-[#94a3b8] font-mono tabular-nums">
+            <span className="text-[#2dd4bf]">5MB: {count5mb}</span>
             <span aria-hidden="true">·</span>
-            <span>XML: {countXml}</span>
+            <span className="text-[#38bdf8]">XML: {countXml}</span>
             <span aria-hidden="true">·</span>
-            <span>Shortlink: {countShort}</span>
+            <span className="text-[#10b981]">Shortlink: {countShort}</span>
           </div>
         </div>
 
-        {/* Flexible 4-Column Grid on Mobile, Segmented Flex on Desktop */}
-        <div className="grid grid-cols-4 sm:flex items-center gap-1 p-1 rounded-lg bg-slate-900/90 border border-white/[0.08] w-full sm:w-auto">
-          {(
-            [
-              { id: 'all', label: `Semua (${links.length})` },
-              { id: '5mb', label: `5MB (${count5mb})` },
-              { id: 'xml', label: `XML (${countXml})` },
-              { id: 'shortlink', label: `Short (${countShort})` },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveFilter(tab.id)}
-              className={`min-h-[36px] px-2 sm:px-3 py-1.5 rounded-md text-[11px] sm:text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center ${
-                activeFilter === tab.id
-                  ? 'bg-[#00E5A3] text-slate-950 font-semibold animate-state-pop'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* 4-Column Segmented Filter with Smooth Sliding Liquid Pill */}
+        <div
+          {...liquidPointerHandlers}
+          className="p-1 rounded-xl glass-subpanel w-full sm:w-auto"
+        >
+          <div className="relative grid grid-cols-4 items-center">
+            <div
+              aria-hidden="true"
+              style={{
+                width: 'calc(100% / 4)',
+                transform: `translate3d(calc(${activeFilterIdx} * 100%), 0, 0) scale(${
+                  isSlidingFilter ? 1.02 : 1
+                })`,
+              }}
+              className="sliding-liquid-pill absolute inset-y-0 left-0 rounded-lg z-0"
+            />
+            {(
+              [
+                { id: 'all', label: `Semua (${links.length})` },
+                { id: '5mb', label: `5MB (${count5mb})` },
+                { id: 'xml', label: `XML (${countXml})` },
+                { id: 'shortlink', label: `Short (${countShort})` },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                {...liquidPointerHandlers}
+                onClick={() => handleSelectFilter(tab.id)}
+                className={`relative z-10 min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium bg-transparent active:scale-95 whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center ${
+                  activeFilter === tab.id
+                    ? 'text-[#f1f5f9] font-semibold'
+                    : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -164,27 +221,28 @@ export const PresetResultsList: React.FC<PresetResultsListProps> = ({
         <div
           role="status"
           aria-live="polite"
-          className="px-4 py-3 rounded-xl bg-[#00E5A3]/10 border border-[#00E5A3]/30 text-xs space-y-1 animate-expand-reveal"
+          className="relative z-10 px-4 py-3 rounded-xl glass-subpanel text-xs space-y-1 animate-expand-reveal"
         >
-          <div className="flex items-center justify-between gap-2 text-[#00E5A3] font-semibold">
+          <div className="flex items-center justify-between gap-2 text-[#2dd4bf] font-semibold">
             <span>URL Utuh Beserta Parameter Berhasil Disalin</span>
             <span className="font-mono tabular-nums">{lastCopiedFullUrl.length} karakter</span>
           </div>
-          <div className="font-mono text-white break-all select-all">
+          <div className="font-mono text-[#f1f5f9] break-all select-all">
             {lastCopiedFullUrl}
           </div>
         </div>
       )}
 
       {(countShort > 0 || countAlightShort > 0) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 text-xs text-[#94a3b8]">
           <span className="hidden sm:inline">
-            Shortlink <code className="text-[#00E5A3]">alight.link</code> otomatis di-resolve ke format tujuan <code className="text-[#00E5A3]">alightcreative.com/am/share/u/.../p/...</code>.
+            Shortlink <code className="text-[#2dd4bf]">alight.link</code> otomatis di-resolve ke format tujuan <code className="text-[#38bdf8]">alightcreative.com/am/share/u/.../p/...</code>.
           </span>
           <button
             type="button"
+            {...liquidPointerHandlers}
             onClick={handleResolveAll}
-            className="text-xs font-semibold text-[#00E5A3] hover:underline flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
+            className="text-xs font-semibold text-[#2dd4bf] hover:underline active:scale-95 flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Resolve Semua Shortlink</span>
@@ -194,7 +252,7 @@ export const PresetResultsList: React.FC<PresetResultsListProps> = ({
 
       <div
         key={`preset-filter-${activeFilter}`}
-        className="divide-y divide-white/[0.08] animate-state-enter"
+        className="relative z-10 divide-y divide-white/[0.08] animate-state-enter"
       >
         {filteredLinks.map((item) => {
           const runtimeResolved = resolvedData[item.id];
@@ -212,8 +270,8 @@ export const PresetResultsList: React.FC<PresetResultsListProps> = ({
             >
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
                 <div className="space-y-1.5 min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                    <span className="font-semibold text-[#00E5A3]">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#94a3b8]">
+                    <span className="font-semibold text-[#2dd4bf]">
                       {item.category === '5mb'
                         ? 'Preset 5MB'
                         : item.category === 'xml'
@@ -221,7 +279,7 @@ export const PresetResultsList: React.FC<PresetResultsListProps> = ({
                         : 'Shortlink'}
                     </span>
                     <span aria-hidden="true">·</span>
-                    <span className="text-slate-300">{item.provider}</span>
+                    <span className="text-[#38bdf8]">{item.provider}</span>
                     <span aria-hidden="true">·</span>
                     <span>{item.label}</span>
                   </div>
@@ -230,22 +288,22 @@ export const PresetResultsList: React.FC<PresetResultsListProps> = ({
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="url-wrap-box block font-mono text-xs sm:text-sm font-medium text-white hover:text-[#00E5A3] transition-colors select-all"
+                    className="url-wrap-box break-all block font-mono text-xs sm:text-sm font-medium text-[#f1f5f9] hover:text-[#2dd4bf] transition-colors select-all"
                   >
                     {item.url}
                   </a>
 
                   {resolvedTargetUrl && resolvedTargetUrl !== item.url && (
                     <div className="pt-1 space-y-0.5">
-                      <div className="text-xs text-[#00E5A3] flex items-center gap-1 font-medium">
+                      <div className="text-xs text-[#2dd4bf] flex items-center gap-1 font-medium">
                         <ArrowRight className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                        <span>URL Tujuan (`alightcreative.com`):</span>
+                        <span>URL Tujuan (alightcreative.com):</span>
                       </div>
                       <a
                         href={resolvedTargetUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="url-wrap-box block font-mono text-xs sm:text-sm font-semibold text-[#00E5A3] hover:underline select-all"
+                        className="url-wrap-box break-all block font-mono text-xs sm:text-sm font-semibold text-[#2dd4bf] hover:underline select-all"
                       >
                         {resolvedTargetUrl}
                       </a>
@@ -253,13 +311,13 @@ export const PresetResultsList: React.FC<PresetResultsListProps> = ({
                   )}
 
                   {activeParams.length > 0 && (
-                    <div className="hidden sm:flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400 font-mono pt-0.5">
-                      <span className="text-slate-400 font-sans">Parameter:</span>
+                    <div className="hidden sm:flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#94a3b8] font-mono pt-0.5">
+                      <span className="text-[#f1f5f9] font-sans">Parameter:</span>
                       {activeParams.map((p, idx) => (
                         <React.Fragment key={`${item.id}-param-${p.key}-${idx}`}>
                           {idx > 0 && <span aria-hidden="true">·</span>}
                           <span>
-                            {p.key}=<span className="text-[#00E5A3]">{p.value}</span>
+                            {p.key}=<span className="text-[#2dd4bf]">{p.value}</span>
                           </span>
                         </React.Fragment>
                       ))}
@@ -267,18 +325,19 @@ export const PresetResultsList: React.FC<PresetResultsListProps> = ({
                   )}
                 </div>
 
-                {/* Action Buttons — Flexible Grid on Mobile */}
+                {/* Action Buttons */}
                 <div className="grid grid-cols-2 sm:flex flex-wrap items-center gap-2 shrink-0 w-full lg:w-auto">
                   {(item.category === 'shortlink' || item.needsAlightResolve) &&
                     !resolvedTargetUrl && (
                       <button
                         type="button"
+                        {...liquidPointerHandlers}
                         onClick={() => handleResolveSingleLink(item)}
                         disabled={isResolving}
-                        className="col-span-2 sm:col-span-1 min-h-[40px] px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                        className="liquid-btn-secondary transform-gpu col-span-2 sm:col-span-1 min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl active:scale-95 text-xs font-medium flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         <RefreshCw
-                          className={`w-3.5 h-3.5 ${isResolving ? 'animate-spin' : ''}`}
+                          className={`w-3.5 h-3.5 text-[#38bdf8] ${isResolving ? 'animate-spin' : ''}`}
                           aria-hidden="true"
                         />
                         <span>{isResolving ? 'Meresolve...' : 'Resolve Link'}</span>
@@ -289,44 +348,46 @@ export const PresetResultsList: React.FC<PresetResultsListProps> = ({
                     href={primaryOpenUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg bg-[#00E5A3] text-slate-950 hover:bg-[#00cca0] text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+                    {...liquidPointerHandlers}
+                    className="liquid-btn-primary transform-gpu min-h-[44px] sm:min-h-[40px] px-3.5 sm:px-4 py-2 rounded-xl active:scale-95 text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
                   >
                     {item.category === '5mb' ||
                     runtimeResolved?.category === '5mb' ? (
                       <>
-                        <Sparkles className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                        <span>Buka di Alight Motion</span>
+                        <Sparkles className="w-3.5 h-3.5 text-[#2dd4bf] shrink-0" aria-hidden="true" />
+                        <span>Buka Preset</span>
                       </>
                     ) : item.category === 'xml' ||
                       runtimeResolved?.category === 'xml' ? (
                       <>
-                        <FileCode2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        <FileCode2 className="w-3.5 h-3.5 text-[#38bdf8] shrink-0" aria-hidden="true" />
                         <span>Unduh File XML</span>
                       </>
                     ) : (
                       <>
-                        <Link2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                        <span>Buka Link</span>
+                        <Link2 className="w-3.5 h-3.5 text-[#2dd4bf] shrink-0" aria-hidden="true" />
+                        <span>Buka Preset</span>
                       </>
                     )}
-                    <ExternalLink className="w-3 h-3 hidden sm:inline shrink-0" aria-hidden="true" />
+                    <ExternalLink className="w-3 h-3 hidden sm:inline text-[#38bdf8] shrink-0" aria-hidden="true" />
                   </a>
 
                   <button
                     type="button"
+                    {...liquidPointerHandlers}
                     onClick={() => handleCopy(item.id, primaryOpenUrl)}
                     aria-label={`Salin URL utuh ${primaryOpenUrl}`}
-                    className="min-h-[40px] px-3 sm:px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                    className="liquid-btn-secondary transform-gpu min-h-[44px] sm:min-h-[40px] px-3 sm:px-3.5 py-2 rounded-xl active:scale-95 text-xs font-medium flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     {copiedId === item.id ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-[#00E5A3] shrink-0" aria-hidden="true" />
-                        <span className="text-[#00E5A3] font-semibold">Tersalin Utuh</span>
+                        <Check className="w-3.5 h-3.5 text-[#10b981] shrink-0" aria-hidden="true" />
+                        <span className="text-[#2dd4bf] font-semibold">Tersalin</span>
                       </>
                     ) : (
                       <>
                         <Copy className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                        <span>Salin URL Utuh</span>
+                        <span>Salin</span>
                       </>
                     )}
                   </button>

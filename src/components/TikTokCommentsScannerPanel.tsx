@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   MessageSquare,
   CornerDownRight,
@@ -28,6 +28,8 @@ import {
   fetchTikTokCommentReplies,
 } from '../utils/tikwmApi';
 import { copyFullUrlToClipboard } from '../utils/clipboard';
+import { CardCornerWatermark } from './AmLogoWatermark';
+import { liquidPointerHandlers } from '../utils/liquidGlass';
 
 interface TikTokCommentsScannerPanelProps {
   platform?: 'tiktok' | 'instagram' | 'youtube';
@@ -68,6 +70,8 @@ export const TikTokCommentsScannerPanel: React.FC<
   onRetryInitialScan,
 }) => {
   const [filterMode, setFilterMode] = useState<CommentFilterMode>('all');
+  const [isSlidingFilter, setIsSlidingFilter] = useState<boolean>(false);
+  const filterTimerRef = useRef<number | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loadingCommentRepliesMap, setLoadingCommentRepliesMap] = useState<
     Record<string, boolean>
@@ -85,6 +89,25 @@ export const TikTokCommentsScannerPanel: React.FC<
   const [resolvedLinkOverrides, setResolvedLinkOverrides] = useState<
     Record<string, string>
   >({});
+
+  const handleSelectFilterMode = (next: CommentFilterMode) => {
+    setIsSlidingFilter(true);
+    if (filterTimerRef.current !== null) {
+      window.clearTimeout(filterTimerRef.current);
+    }
+    filterTimerRef.current = window.setTimeout(() => {
+      setIsSlidingFilter(false);
+    }, 300);
+    setFilterMode(next);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (filterTimerRef.current !== null) {
+        window.clearTimeout(filterTimerRef.current);
+      }
+    };
+  }, []);
 
   const totalRepliesLoaded = threads.reduce(
     (sum, t) => sum + (t.replies?.length || 0),
@@ -157,7 +180,6 @@ export const TikTokCommentsScannerPanel: React.FC<
     []
   );
 
-  // Automatically resolve any alight.link shortlinks discovered in comments or replies
   React.useEffect(() => {
     const pendingLinks = allExtractedCommentLinks.filter(
       (l) =>
@@ -326,48 +348,49 @@ export const TikTokCommentsScannerPanel: React.FC<
           return (
             <div
               key={link.id}
-              className="p-3 rounded-lg bg-[#00E5A3]/[0.08] border border-[#00E5A3]/35 space-y-2"
+              {...liquidPointerHandlers}
+              className="glass-subpanel p-3 rounded-xl space-y-2"
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div className="space-y-1 min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <span className="font-semibold text-[#00E5A3]">
+                    <span className="font-semibold text-[#2dd4bf]">
                       {link.category === '5mb'
                         ? 'Preset 5MB'
                         : link.category === 'xml'
                         ? 'Preset XML'
                         : 'Shortlink'}
                     </span>
-                    <span aria-hidden="true" className="text-slate-500">
+                    <span aria-hidden="true" className="text-[#94a3b8]">
                       ·
                     </span>
-                    <span className="text-slate-300">{link.provider}</span>
-                    <span aria-hidden="true" className="text-slate-500">
+                    <span className="text-[#38bdf8]">{link.provider}</span>
+                    <span aria-hidden="true" className="text-[#94a3b8]">
                       ·
                     </span>
-                    <span className="text-slate-400">{link.label}</span>
+                    <span className="text-[#94a3b8]">{link.label}</span>
                   </div>
 
                   <a
                     href={link.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block font-mono text-xs font-medium text-white hover:text-[#00E5A3] hover:underline break-all select-all"
+                    className="block font-mono text-xs font-medium text-[#f1f5f9] hover:text-[#2dd4bf] hover:underline break-all select-all"
                   >
                     {link.url}
                   </a>
 
                   {resolvedUrl && resolvedUrl !== link.url && (
                     <div className="pt-1 space-y-0.5">
-                      <div className="text-[11px] text-[#00E5A3] flex items-center gap-1 font-medium">
+                      <div className="text-[11px] text-[#2dd4bf] flex items-center gap-1 font-medium">
                         <ArrowRight className="w-3 h-3" aria-hidden="true" />
-                        <span>URL Tujuan (`alightcreative.com/am/share/...`):</span>
+                        <span>URL Tujuan (alightcreative.com/am/share/...):</span>
                       </div>
                       <a
                         href={resolvedUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block font-mono text-xs font-semibold text-[#00E5A3] hover:underline break-all select-all"
+                        className="block font-mono text-xs font-semibold text-[#2dd4bf] hover:underline break-all select-all"
                       >
                         {resolvedUrl}
                       </a>
@@ -380,9 +403,10 @@ export const TikTokCommentsScannerPanel: React.FC<
                     !resolvedUrl && (
                       <button
                         type="button"
+                        {...liquidPointerHandlers}
                         onClick={() => handleResolveSingleShortlink(link)}
                         disabled={isResolving}
-                        className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-200 hover:bg-amber-500/25 text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
+                        className="liquid-btn-secondary px-2.5 py-1.5 rounded-lg text-[#2dd4bf] text-xs font-medium flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         <RefreshCw
                           className={`w-3 h-3 ${isResolving ? 'animate-spin' : ''}`}
@@ -398,39 +422,41 @@ export const TikTokCommentsScannerPanel: React.FC<
                     href={primaryUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-1.5 rounded-lg bg-[#00E5A3] text-slate-950 hover:bg-[#00cca0] text-xs font-semibold transition-colors flex items-center gap-1 whitespace-nowrap shrink-0"
+                    {...liquidPointerHandlers}
+                    className="liquid-btn-primary px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 whitespace-nowrap shrink-0"
                   >
                     {link.category === '5mb' ? (
                       <>
-                        <Sparkles className="w-3 h-3" aria-hidden="true" />
+                        <Sparkles className="w-3 h-3 text-[#2dd4bf]" aria-hidden="true" />
                         <span>Buka di Alight Motion</span>
                       </>
                     ) : link.category === 'xml' ? (
                       <>
-                        <FileCode2 className="w-3 h-3" aria-hidden="true" />
+                        <FileCode2 className="w-3 h-3 text-[#38bdf8]" aria-hidden="true" />
                         <span>Unduh XML</span>
                       </>
                     ) : (
                       <>
-                        <Link2 className="w-3 h-3" aria-hidden="true" />
+                        <Link2 className="w-3 h-3 text-[#2dd4bf]" aria-hidden="true" />
                         <span>Buka Link</span>
                       </>
                     )}
-                    <ExternalLink className="w-3 h-3" aria-hidden="true" />
+                    <ExternalLink className="w-3 h-3 text-[#38bdf8]" aria-hidden="true" />
                   </a>
 
                   <button
                     type="button"
+                    {...liquidPointerHandlers}
                     onClick={() => handleCopyUrl(link.id, primaryUrl)}
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-medium transition-colors flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
+                    className="liquid-btn-secondary px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     {copiedId === link.id ? (
                       <>
                         <Check
-                          className="w-3 h-3 text-[#00E5A3]"
+                          className="w-3 h-3 text-[#10b981]"
                           aria-hidden="true"
                         />
-                        <span className="text-[#00E5A3] font-semibold">
+                        <span className="text-[#2dd4bf] font-semibold">
                           Tersalin Utuh
                         </span>
                       </>
@@ -445,13 +471,13 @@ export const TikTokCommentsScannerPanel: React.FC<
               </div>
 
               {params.length > 0 && (
-                <div className="pt-1.5 border-t border-white/10 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-mono text-slate-400">
-                  <span className="text-slate-300 font-sans">Parameter:</span>
+                <div className="pt-1.5 border-t border-white/[0.08] flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-mono text-[#94a3b8]">
+                  <span className="text-[#f1f5f9] font-sans">Parameter:</span>
                   {params.map((p, idx) => (
                     <React.Fragment key={`${link.id}-p-${p.key}-${idx}`}>
                       {idx > 0 && <span aria-hidden="true">·</span>}
                       <span>
-                        {p.key}=<span className="text-[#00E5A3]">{p.value}</span>
+                        {p.key}=<span className="text-[#2dd4bf]">{p.value}</span>
                       </span>
                     </React.Fragment>
                   ))}
@@ -464,13 +490,24 @@ export const TikTokCommentsScannerPanel: React.FC<
     );
   };
 
+  const filterOrderList: CommentFilterMode[] =
+    platform === 'tiktok'
+      ? ['all', 'with-links', 'creator', 'with-replies']
+      : ['all', 'with-links', 'creator'];
+  const activeFilterIdx = Math.max(0, filterOrderList.indexOf(filterMode));
+
   return (
-    <div className="glass-panel rounded-2xl p-4 sm:p-6 space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 border-b border-white/[0.08] pb-3.5 sm:pb-4">
+    <div
+      {...liquidPointerHandlers}
+      className="glass-panel rounded-2xl p-4 sm:p-6 space-y-4 overflow-hidden"
+    >
+      <CardCornerWatermark />
+
+      <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 border-b border-white/[0.08] pb-3.5 sm:pb-4">
         <div className="max-w-2xl space-y-1">
-          <h3 className="text-sm sm:text-base font-semibold text-white flex items-center gap-2">
+          <h3 className="text-sm sm:text-base font-semibold text-[#f1f5f9] flex items-center gap-2">
             <MessageSquare
-              className="w-4 h-4 text-[#00E5A3] shrink-0"
+              className="w-4 h-4 text-[#2dd4bf] shrink-0"
               aria-hidden="true"
             />
             <span>
@@ -479,16 +516,16 @@ export const TikTokCommentsScannerPanel: React.FC<
                 : 'Kolom Komentar & Balasan TikTok'}
             </span>
           </h3>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono tabular-nums">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[#94a3b8] font-mono tabular-nums">
             <span>{threads.length} komentar dipindai</span>
             {platform === 'tiktok' && (
               <>
                 <span aria-hidden="true">·</span>
-                <span>{totalRepliesLoaded} balasan dipindai</span>
+                <span className="text-[#38bdf8]">{totalRepliesLoaded} balasan dipindai</span>
               </>
             )}
             <span aria-hidden="true">·</span>
-            <span className="text-[#00E5A3] font-semibold">
+            <span className="text-[#2dd4bf] font-semibold">
               {allExtractedCommentLinks.length} tautan preset ditemukan
             </span>
           </div>
@@ -498,18 +535,19 @@ export const TikTokCommentsScannerPanel: React.FC<
           {platform === 'tiktok' && unscannedReplyThreads.length > 0 && (
             <button
               type="button"
+              {...liquidPointerHandlers}
               onClick={handleScanAllRemainingReplies}
               disabled={isScanningAllReplies || isScanningInitial}
-              className="min-h-[40px] px-3 sm:px-3.5 py-2 rounded-lg bg-[#00E5A3] text-slate-950 hover:bg-[#00cca0] disabled:opacity-50 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+              className="liquid-btn-primary min-h-[40px] px-3 sm:px-3.5 py-2 rounded-xl disabled:opacity-50 text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
             >
               {isScanningAllReplies ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" aria-hidden="true" />
+                  <Loader2 className="w-3.5 h-3.5 text-[#2dd4bf] animate-spin shrink-0" aria-hidden="true" />
                   <span className="truncate">{batchReplyProgress || 'Memindai Balasan...'}</span>
                 </>
               ) : (
                 <>
-                  <CornerDownRight className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  <CornerDownRight className="w-3.5 h-3.5 text-[#2dd4bf] shrink-0" aria-hidden="true" />
                   <span>
                     Pindai Balasan ({unscannedReplyThreads.length})
                   </span>
@@ -520,12 +558,13 @@ export const TikTokCommentsScannerPanel: React.FC<
 
           <button
             type="button"
+            {...liquidPointerHandlers}
             onClick={onRetryInitialScan}
             disabled={isScanningInitial}
-            className="min-h-[40px] px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+            className="liquid-btn-secondary min-h-[40px] px-3 py-2 rounded-xl disabled:opacity-50 text-xs font-medium flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
           >
             <RefreshCw
-              className={`w-3.5 h-3.5 shrink-0 ${isScanningInitial ? 'animate-spin' : ''}`}
+              className={`w-3.5 h-3.5 text-[#38bdf8] shrink-0 ${isScanningInitial ? 'animate-spin' : ''}`}
               aria-hidden="true"
             />
             <span>Pindai Ulang</span>
@@ -538,10 +577,10 @@ export const TikTokCommentsScannerPanel: React.FC<
         <div
           role="status"
           aria-live="polite"
-          className="p-4 rounded-lg bg-[#00E5A3]/10 border border-[#00E5A3]/30 flex items-center gap-3 text-xs text-white"
+          className="relative z-10 glass-subpanel p-4 rounded-xl flex items-center gap-3 text-xs text-[#f1f5f9]"
         >
           <Loader2
-            className="w-4 h-4 text-[#00E5A3] animate-spin shrink-0"
+            className="w-4 h-4 text-[#38bdf8] animate-spin shrink-0"
             aria-hidden="true"
           />
           <span>
@@ -555,7 +594,7 @@ export const TikTokCommentsScannerPanel: React.FC<
       {(scanError || localError) && (
         <div
           role="alert"
-          className="p-3.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs flex items-center justify-between gap-3"
+          className="relative z-10 p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs flex items-center justify-between gap-3"
         >
           <div className="flex items-center gap-2">
             <AlertCircle
@@ -567,77 +606,101 @@ export const TikTokCommentsScannerPanel: React.FC<
           <button
             type="button"
             onClick={onRetryInitialScan}
-            className="px-3 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+            className="px-3 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 font-semibold whitespace-nowrap shrink-0 cursor-pointer"
           >
             Coba Lagi
           </button>
         </div>
       )}
 
-      {/* Filter & Search Controls — Flexible 2x2 Grid on Mobile */}
+      {/* Filter & Search Controls */}
       {threads.length > 0 && (
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
-          <div className="grid grid-cols-2 sm:flex flex-wrap items-center gap-1 p-1 rounded-lg bg-slate-900/90 border border-white/10 w-full md:w-auto">
-            <button
-              type="button"
-              onClick={() => setFilterMode('all')}
-              className={`min-h-[36px] px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center ${
-                filterMode === 'all'
-                  ? 'bg-[#00E5A3] text-slate-950 font-semibold animate-state-pop'
-                  : 'text-slate-300 hover:text-white'
-              }`}
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
+          <div
+            {...liquidPointerHandlers}
+            className="p-1 rounded-xl glass-subpanel w-full md:w-auto"
+          >
+            <div
+              className={`relative grid ${
+                platform === 'tiktok' ? 'grid-cols-4' : 'grid-cols-3'
+              } items-center`}
             >
-              Semua ({threads.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterMode('with-links')}
-              className={`min-h-[36px] px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center ${
-                filterMode === 'with-links'
-                  ? 'bg-[#00E5A3] text-slate-950 font-semibold animate-state-pop'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Ada Link ({countWithLinks})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterMode('creator')}
-              className={`min-h-[36px] px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center ${
-                filterMode === 'creator'
-                  ? 'bg-[#00E5A3] text-slate-950 font-semibold animate-state-pop'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Kreator ({countCreator})
-            </button>
-            {platform === 'tiktok' && (
+              <div
+                aria-hidden="true"
+                style={{
+                  width: `calc(100% / ${filterOrderList.length})`,
+                  transform: `translate3d(calc(${activeFilterIdx} * 100%), 0, 0) scale(${
+                    isSlidingFilter ? 1.02 : 1
+                  })`,
+                }}
+                className="sliding-liquid-pill absolute inset-y-0 left-0 rounded-lg z-0"
+              />
               <button
                 type="button"
-                onClick={() => setFilterMode('with-replies')}
-                className={`min-h-[36px] px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center ${
-                  filterMode === 'with-replies'
-                    ? 'bg-[#00E5A3] text-slate-950 font-semibold animate-state-pop'
-                    : 'text-slate-300 hover:text-white'
+                {...liquidPointerHandlers}
+                onClick={() => handleSelectFilterMode('all')}
+                className={`relative z-10 min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium bg-transparent active:scale-95 whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center ${
+                  filterMode === 'all'
+                    ? 'text-[#f1f5f9] font-semibold'
+                    : 'text-[#94a3b8] hover:text-[#f1f5f9]'
                 }`}
               >
-                Ada Balasan ({countWithReplies})
+                Semua ({threads.length})
               </button>
-            )}
+              <button
+                type="button"
+                {...liquidPointerHandlers}
+                onClick={() => handleSelectFilterMode('with-links')}
+                className={`relative z-10 min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium bg-transparent active:scale-95 whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center ${
+                  filterMode === 'with-links'
+                    ? 'text-[#f1f5f9] font-semibold'
+                    : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                }`}
+              >
+                Ada Link ({countWithLinks})
+              </button>
+              <button
+                type="button"
+                {...liquidPointerHandlers}
+                onClick={() => handleSelectFilterMode('creator')}
+                className={`relative z-10 min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium bg-transparent active:scale-95 whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center ${
+                  filterMode === 'creator'
+                    ? 'text-[#f1f5f9] font-semibold'
+                    : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                }`}
+              >
+                Kreator ({countCreator})
+              </button>
+              {platform === 'tiktok' && (
+                <button
+                  type="button"
+                  {...liquidPointerHandlers}
+                  onClick={() => handleSelectFilterMode('with-replies')}
+                  className={`relative z-10 min-h-[36px] px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium bg-transparent active:scale-95 whitespace-nowrap shrink-0 cursor-pointer flex items-center justify-center ${
+                    filterMode === 'with-replies'
+                      ? 'text-[#f1f5f9] font-semibold'
+                      : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                  }`}
+                >
+                  Balasan ({countWithReplies})
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="relative">
             <Search
-              className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              className="w-3.5 h-3.5 text-[#38bdf8] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10"
               aria-hidden="true"
             />
             <input
               type="search"
               value={searchQuery}
+              {...liquidPointerHandlers}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari di komentar..."
               aria-label="Cari di komentar"
-              className="w-full md:w-64 min-h-[38px] pl-8 pr-3 py-1.5 rounded-lg bg-slate-900/90 border border-white/10 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-[#00E5A3]"
+              className="liquid-input w-full md:w-64 min-h-[38px] pl-8 pr-3 py-1.5 rounded-xl text-xs text-[#f1f5f9] placeholder:text-[#94a3b8]/75"
             />
           </div>
         </div>
@@ -645,37 +708,36 @@ export const TikTokCommentsScannerPanel: React.FC<
 
       {/* Comments & Replies Thread List */}
       {!isScanningInitial && threads.length === 0 && !scanError ? (
-        <div className="glass-subpanel rounded-lg p-6 text-center space-y-2 animate-state-enter">
-          <p className="text-sm font-medium text-slate-200">
+        <div className="relative z-10 glass-subpanel rounded-xl p-6 text-center space-y-2 animate-state-enter">
+          <p className="text-sm font-medium text-[#f1f5f9]">
             Tidak ada komentar publik pada video ini.
           </p>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
+          <p className="text-xs text-[#94a3b8] max-w-md mx-auto">
             Pastikan kolom komentar pada video diaktifkan oleh kreator, atau klik Pindai Ulang.
           </p>
         </div>
       ) : filteredThreads.length === 0 && threads.length > 0 ? (
         <div
           key={`empty-filter-${filterMode}`}
-          className="glass-subpanel rounded-lg p-6 text-center space-y-2 animate-state-enter"
+          className="relative z-10 glass-subpanel rounded-xl p-6 text-center space-y-2 animate-state-enter"
         >
-          <p className="text-sm font-medium text-slate-200">
+          <p className="text-sm font-medium text-[#f1f5f9]">
             Tidak ada komentar yang cocok dengan filter ini.
           </p>
           {platform === 'tiktok' &&
             unscannedReplyThreads.length > 0 &&
             filterMode === 'with-links' && (
-              <p className="text-xs text-slate-400 max-w-md mx-auto">
-                Masih ada {unscannedReplyThreads.length} thread komentar yang memiliki balasan namun belum dipindai. Klik tombol <strong>Pindai Semua Balasan</strong> di atas untuk memeriksa seluruh balasan.
+              <p className="text-xs text-[#94a3b8] max-w-md mx-auto">
+                Masih ada {unscannedReplyThreads.length} thread komentar yang memiliki balasan namun belum dipindai. Klik tombol <strong className="text-[#f1f5f9]">Pindai Balasan</strong> di atas untuk memeriksa seluruh balasan.
               </p>
             )}
         </div>
       ) : (
         <div
           key={`list-${filterMode}`}
-          className="space-y-3 max-h-[540px] overflow-y-auto pr-1 animate-state-enter"
+          className="relative z-10 space-y-3 max-h-[540px] overflow-y-auto pr-1 animate-state-enter"
         >
           {filteredThreads.map((comment) => {
-            const hasAnyLink = threadHasPresetLink(comment);
             const isLoadingReplies = Boolean(
               loadingCommentRepliesMap[comment.id]
             );
@@ -683,35 +745,32 @@ export const TikTokCommentsScannerPanel: React.FC<
             return (
               <div
                 key={comment.id}
-                className={`glass-subpanel rounded-lg p-4 space-y-3 transition-colors ${
-                  hasAnyLink
-                    ? 'border-[#00E5A3]/45 bg-[#00E5A3]/[0.03]'
-                    : 'border-white/10'
-                }`}
+                {...liquidPointerHandlers}
+                className="glass-subpanel rounded-xl p-4 space-y-3 transition-colors"
               >
                 {/* Top-Level Comment Header */}
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-white">
+                    <span className="font-semibold text-[#f1f5f9]">
                       {comment.user.nickname}
                     </span>
-                    <span className="font-mono text-slate-400">
+                    <span className="font-mono text-[#38bdf8]">
                       @{comment.user.uniqueId}
                     </span>
                     {comment.isCreator && (
-                      <span className="text-[#00E5A3] font-semibold flex items-center gap-1">
+                      <span className="text-[#2dd4bf] font-semibold flex items-center gap-1">
                         <UserCheck className="w-3.5 h-3.5" aria-hidden="true" />
                         <span>Kreator Video</span>
                       </span>
                     )}
                     {comment.extractedLinks.length > 0 && (
-                      <span className="text-[#00E5A3] font-mono font-semibold">
+                      <span className="text-[#2dd4bf] font-mono font-semibold">
                         · {comment.extractedLinks.length} Link Preset
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-3 text-slate-400 font-mono tabular-nums">
+                  <div className="flex items-center gap-3 text-[#94a3b8] font-mono tabular-nums">
                     <span className="flex items-center gap-1">
                       <ThumbsUp className="w-3 h-3" aria-hidden="true" />
                       <span>{comment.diggCount}</span>
@@ -723,59 +782,55 @@ export const TikTokCommentsScannerPanel: React.FC<
                 </div>
 
                 {/* Top-Level Comment Body */}
-                <p className="text-xs sm:text-sm text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
+                <p className="text-xs sm:text-sm text-[#f1f5f9] whitespace-pre-wrap break-words leading-relaxed">
                   {comment.text}
                 </p>
 
                 {/* Extracted Preset Links inside Top-Level Comment */}
                 {renderExtractedLinksInline(comment.extractedLinks)}
 
-                {/* Replies Controls & Nested Replies List (TikTok only) */}
+                {/* Replies Controls & Nested Replies List */}
                 {platform === 'tiktok' &&
                   (comment.replyTotal > 0 || comment.replies.length > 0) && (
-                    <div className="pt-2 border-t border-white/5 space-y-2.5">
+                    <div className="pt-2 border-t border-white/[0.08] space-y-2.5">
                       {comment.replies.length > 0 && (
-                        <div className="pl-3 sm:pl-4 border-l-2 border-white/15 space-y-2.5 animate-expand-reveal">
+                        <div className="pl-3 sm:pl-4 border-l border-white/15 space-y-2.5 animate-expand-reveal">
                           {comment.replies.map((reply) => (
                             <div
                               key={reply.id}
-                              className={`p-3 rounded-lg space-y-1.5 animate-state-enter ${
-                                reply.extractedLinks.length > 0
-                                  ? 'bg-[#00E5A3]/[0.06] border border-[#00E5A3]/35'
-                                  : 'bg-slate-950/60 border border-white/5'
-                              }`}
+                              className="p-3 rounded-xl bg-[#0b0c0e]/65 border border-white/[0.06] space-y-1.5 animate-state-enter"
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <CornerDownRight
-                                    className="w-3 h-3 text-slate-400 shrink-0"
+                                    className="w-3 h-3 text-[#38bdf8] shrink-0"
                                     aria-hidden="true"
                                   />
-                                  <span className="font-semibold text-white">
+                                  <span className="font-semibold text-[#f1f5f9]">
                                     {reply.user.nickname}
                                   </span>
-                                  <span className="font-mono text-slate-400">
+                                  <span className="font-mono text-[#38bdf8]">
                                     @{reply.user.uniqueId}
                                   </span>
                                   {reply.isCreator && (
-                                    <span className="text-[#00E5A3] font-semibold">
+                                    <span className="text-[#2dd4bf] font-semibold">
                                       · Kreator
                                     </span>
                                   )}
                                   {reply.extractedLinks.length > 0 && (
-                                    <span className="text-[#00E5A3] font-mono font-semibold">
+                                    <span className="text-[#2dd4bf] font-mono font-semibold">
                                       · {reply.extractedLinks.length} Link Preset
                                     </span>
                                   )}
                                 </div>
 
-                                <span className="text-slate-400 font-mono tabular-nums flex items-center gap-1">
+                                <span className="text-[#94a3b8] font-mono tabular-nums flex items-center gap-1">
                                   <ThumbsUp className="w-3 h-3" aria-hidden="true" />
                                   <span>{reply.diggCount}</span>
                                 </span>
                               </div>
 
-                              <p className="text-xs text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
+                              <p className="text-xs text-[#f1f5f9] whitespace-pre-wrap break-words leading-relaxed">
                                 {reply.text}
                               </p>
 
@@ -785,7 +840,6 @@ export const TikTokCommentsScannerPanel: React.FC<
                         </div>
                       )}
 
-                      {/* Button to load or load more replies for this comment */}
                       {(!comment.repliesLoaded || comment.repliesHasMore) && (
                         <button
                           type="button"
@@ -796,7 +850,7 @@ export const TikTokCommentsScannerPanel: React.FC<
                             )
                           }
                           disabled={isLoadingReplies}
-                          className="text-xs font-semibold text-[#00E5A3] hover:underline flex items-center gap-1.5 cursor-pointer"
+                          className="text-xs font-semibold text-[#2dd4bf] hover:underline flex items-center gap-1.5 cursor-pointer"
                         >
                           {isLoadingReplies ? (
                             <span
@@ -837,15 +891,16 @@ export const TikTokCommentsScannerPanel: React.FC<
 
       {/* Pagination Footer for More Top-Level Comments */}
       {hasMore && (
-        <div className="pt-2 border-t border-white/10 flex items-center justify-between">
-          <span className="text-xs text-slate-400 font-mono tabular-nums">
+        <div className="relative z-10 pt-2 border-t border-white/[0.08] flex items-center justify-between">
+          <span className="text-xs text-[#94a3b8] font-mono tabular-nums">
             Menampilkan {threads.length} komentar yang telah dipindai
           </span>
           <button
             type="button"
+            {...liquidPointerHandlers}
             onClick={handleLoadMoreComments}
             disabled={isLoadingMoreComments}
-            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-xs font-semibold text-[#00E5A3] transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="liquid-btn-secondary px-4 py-2 rounded-xl disabled:opacity-50 text-xs font-semibold text-[#2dd4bf] flex items-center gap-1.5 cursor-pointer"
           >
             {isLoadingMoreComments ? (
               <>

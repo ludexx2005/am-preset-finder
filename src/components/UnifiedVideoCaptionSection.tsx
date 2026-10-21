@@ -22,6 +22,8 @@ import {
 } from '../utils/presetParser';
 import { QrScanDetection } from '../utils/qrHelper';
 import { copyFullUrlToClipboard } from '../utils/clipboard';
+import { CardCornerWatermark } from './AmLogoWatermark';
+import { liquidPointerHandlers } from '../utils/liquidGlass';
 
 interface UnifiedVideoCaptionSectionProps {
   videoData: SocialVideoData;
@@ -54,7 +56,6 @@ export const UnifiedVideoCaptionSection: React.FC<
   const [copiedCaption, setCopiedCaption] = useState<boolean>(false);
   const [isCaptionExpanded, setIsCaptionExpanded] = useState<boolean>(false);
 
-  // Reset player state when switching videos
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
@@ -81,7 +82,6 @@ export const UnifiedVideoCaptionSection: React.FC<
     if (!v) return;
     if (v.paused || v.ended) {
       v.play().catch(() => {
-        // Fallback: if unmuted play was blocked by browser policy, unmute after starting
         v.muted = true;
         setIsMuted(true);
         v.play().catch(() => {});
@@ -172,22 +172,25 @@ export const UnifiedVideoCaptionSection: React.FC<
     <section
       aria-label="Pemutar Video dan Detail Caption"
       data-testid="unified-video-caption-section"
-      className="glass-panel rounded-2xl overflow-hidden border border-white/10"
+      {...liquidPointerHandlers}
+      className="glass-panel transform-gpu rounded-2xl overflow-hidden"
     >
+      <CardCornerWatermark />
+
       {/* Top Section Header Bar */}
-      <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-white/[0.08] bg-slate-950/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
-        <div className="flex flex-wrap items-center gap-2 text-xs font-mono tabular-nums text-slate-400">
-          <span className="text-xs sm:text-sm font-sans font-semibold text-white">
+      <div className="relative z-10 px-4 sm:px-6 py-3.5 sm:py-4 border-b border-white/[0.08] bg-[#111317]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-mono tabular-nums text-[#94a3b8]">
+          <span className="text-xs sm:text-sm font-sans font-semibold text-[#f1f5f9]">
             Pemutar Video & Detail Caption
           </span>
           <span aria-hidden="true">·</span>
-          <span className="text-[#00E5A3] font-sans font-semibold">
+          <span className="text-[#2dd4bf] font-sans font-semibold">
             {platformName}
           </span>
           <span aria-hidden="true" className="hidden sm:inline">
             ·
           </span>
-          <span className="hidden sm:inline">ID {videoData.id}</span>
+          <span className="hidden sm:inline text-[#38bdf8]">ID {videoData.id}</span>
         </div>
 
         <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
@@ -196,7 +199,8 @@ export const UnifiedVideoCaptionSection: React.FC<
               href={videoData.playUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="min-h-[40px] px-3 sm:px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-[#00E5A3] transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+              {...liquidPointerHandlers}
+              className="liquid-btn-secondary transform-gpu min-h-[44px] sm:min-h-[40px] px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold text-[#2dd4bf] flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
             >
               <Download className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
               <span>
@@ -210,25 +214,26 @@ export const UnifiedVideoCaptionSection: React.FC<
             href={videoData.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="min-h-[40px] px-3 sm:px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-medium text-slate-200 hover:text-white transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+            {...liquidPointerHandlers}
+            className="liquid-btn-secondary transform-gpu min-h-[44px] sm:min-h-[40px] px-3 sm:px-3.5 py-2 rounded-xl text-xs font-medium text-[#f1f5f9] flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
           >
-            <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            <ExternalLink className="w-3.5 h-3.5 text-[#38bdf8] shrink-0" aria-hidden="true" />
             <span>Buka Video Asli</span>
           </a>
         </div>
       </div>
 
-      {/* Unified 2-Column Body: Left = Full-Control Video Player, Right = Creator Details & Caption */}
-      <div className="p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-stretch">
-        {/* LEFT COLUMN: Interactive Video Player with Full Controls */}
-        <div className="lg:col-span-5 flex flex-col justify-between gap-3">
+      {/* Unified 2-Column Body (Vertical stack on Mobile: flex-col lg:flex-row) */}
+      <div className="relative z-10 p-4 sm:p-6 flex flex-col lg:flex-row gap-4 sm:gap-6 items-stretch">
+        {/* LEFT COLUMN: Interactive Video Player */}
+        <div className="w-full lg:w-5/12 flex flex-col justify-between gap-3 min-w-0">
           {effectiveVideoSrc ? (
             <>
               <div
-                className={`relative rounded-xl overflow-hidden bg-black border flex items-center justify-center min-h-[220px] sm:min-h-[340px] transition-all duration-300 ${
+                className={`relative rounded-xl overflow-hidden bg-[#0b0c0e] border flex items-center justify-center min-h-[220px] sm:min-h-[340px] transition-[transform,opacity,background-color,border-color] duration-300 ease-out ${
                   isPlaying
-                    ? 'border-[#00E5A3]/45 shadow-[0_0_28px_-6px_rgba(0,229,163,0.28)]'
-                    : 'border-white/10'
+                    ? 'border-[#38bdf8]/45 shadow-[0_0_24px_-6px_rgba(56,189,248,0.28)]'
+                    : 'border-white/[0.08]'
                 }`}
               >
                 <video
@@ -266,18 +271,18 @@ export const UnifiedVideoCaptionSection: React.FC<
                       setUseDirectFallback(true);
                     }
                   }}
-                  className="w-full max-h-[300px] sm:max-h-[400px] object-contain bg-black block"
+                  className="w-full max-h-[300px] sm:max-h-[400px] object-contain bg-[#0b0c0e] block"
                 />
               </div>
 
               {/* Dedicated Interactive Full Control Bar */}
               <div
                 aria-label="Kontrol Pemutar Video"
+                {...liquidPointerHandlers}
                 className="glass-subpanel rounded-xl p-3.5 space-y-2.5"
               >
-                {/* Interactive Seekbar Row */}
                 <div className="flex items-center gap-2.5">
-                  <span className="text-xs font-mono tabular-nums text-[#00E5A3] w-10">
+                  <span className="text-xs font-mono tabular-nums text-[#2dd4bf] w-10">
                     {formatVideoTimestamp(currentTime)}
                   </span>
                   <input
@@ -288,20 +293,20 @@ export const UnifiedVideoCaptionSection: React.FC<
                     step={0.1}
                     value={Math.min(currentTime, Math.max(1, duration))}
                     onChange={handleSeek}
-                    className="flex-1 accent-[#00E5A3] cursor-pointer h-1.5"
+                    className="flex-1 accent-[#2dd4bf] cursor-pointer h-1.5"
                   />
-                  <span className="text-xs font-mono tabular-nums text-slate-400 w-10 text-right">
+                  <span className="text-xs font-mono tabular-nums text-[#94a3b8] w-10 text-right">
                     {formatVideoTimestamp(duration)}
                   </span>
                 </div>
 
-                {/* Full Playback Action Controls — Clean single-row Flexbox layout */}
-                <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-white/[0.06]">
+                <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-white/[0.08]">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={handleTogglePlay}
-                      className="min-h-[38px] px-3 py-1.5 rounded-lg bg-[#00E5A3] hover:bg-[#00cca0] text-slate-950 font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                      className="liquid-btn-primary min-h-[38px] px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       {isPlaying ? (
                         <span
@@ -309,7 +314,7 @@ export const UnifiedVideoCaptionSection: React.FC<
                           className="animate-state-pop flex items-center gap-1.5"
                         >
                           <Pause
-                            className="w-3.5 h-3.5 fill-current"
+                            className="w-3.5 h-3.5 text-[#2dd4bf] fill-current"
                             aria-hidden="true"
                           />
                           <span>Jeda</span>
@@ -320,7 +325,7 @@ export const UnifiedVideoCaptionSection: React.FC<
                           className="animate-state-pop flex items-center gap-1.5"
                         >
                           <Play
-                            className="w-3.5 h-3.5 fill-current"
+                            className="w-3.5 h-3.5 text-[#2dd4bf] fill-current"
                             aria-hidden="true"
                           />
                           <span>Putar Video</span>
@@ -330,31 +335,33 @@ export const UnifiedVideoCaptionSection: React.FC<
 
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={handleRestartVideo}
                       aria-label="Ulangi dari awal"
-                      className="min-h-[38px] min-w-[38px] p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                      className="liquid-btn-secondary min-h-[38px] min-w-[38px] p-1.5 rounded-lg flex items-center justify-center shrink-0 cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
 
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={handleToggleMute}
                       aria-label={
                         isMuted ? 'Aktifkan suara' : 'Bisukan suara'
                       }
-                      className="min-h-[38px] min-w-[38px] p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                      className="liquid-btn-secondary min-h-[38px] min-w-[38px] p-1.5 rounded-lg flex items-center justify-center shrink-0 cursor-pointer"
                     >
                       {isMuted || volume === 0 ? (
                         <VolumeX
                           key="muted-icon"
-                          className="w-3.5 h-3.5 text-amber-400 animate-state-pop"
+                          className="w-3.5 h-3.5 text-[#38bdf8] animate-state-pop"
                           aria-hidden="true"
                         />
                       ) : (
                         <Volume2
                           key="unmuted-icon"
-                          className="w-3.5 h-3.5 text-[#00E5A3] animate-state-pop"
+                          className="w-3.5 h-3.5 text-[#2dd4bf] animate-state-pop"
                           aria-hidden="true"
                         />
                       )}
@@ -368,16 +375,17 @@ export const UnifiedVideoCaptionSection: React.FC<
                       step={0.05}
                       value={isMuted ? 0 : volume}
                       onChange={handleVolumeChange}
-                      className="w-12 accent-[#00E5A3] cursor-pointer hidden sm:block shrink-0"
+                      className="w-12 accent-[#2dd4bf] cursor-pointer hidden sm:block shrink-0"
                     />
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={handleCycleSpeed}
                       aria-label={`Ubah kecepatan (${playbackRate}x)`}
-                      className="min-h-[38px] px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-mono tabular-nums text-slate-200 transition-colors flex items-center justify-center whitespace-nowrap shrink-0 cursor-pointer"
+                      className="liquid-btn-secondary min-h-[38px] px-2.5 py-1.5 rounded-lg text-xs font-mono tabular-nums flex items-center justify-center whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       <span
                         key={`rate-${playbackRate}`}
@@ -389,9 +397,10 @@ export const UnifiedVideoCaptionSection: React.FC<
 
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={handleFullscreen}
                       aria-label="Layar penuh"
-                      className="min-h-[38px] min-w-[38px] p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                      className="liquid-btn-secondary min-h-[38px] min-w-[38px] p-1.5 rounded-lg flex items-center justify-center shrink-0 cursor-pointer"
                     >
                       <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
@@ -401,7 +410,7 @@ export const UnifiedVideoCaptionSection: React.FC<
             </>
           ) : youtubeEmbedUrl ? (
             <div className="flex flex-col justify-between gap-3 h-full">
-              <div className="relative rounded-xl overflow-hidden bg-black border border-white/10 aspect-video lg:flex-1 min-h-[220px] sm:min-h-[260px]">
+              <div className="relative rounded-xl overflow-hidden bg-[#0b0c0e] border border-white/[0.08] aspect-video lg:flex-1 min-h-[220px] sm:min-h-[260px]">
                 <iframe
                   src={youtubeEmbedUrl}
                   title={
@@ -415,15 +424,15 @@ export const UnifiedVideoCaptionSection: React.FC<
                 />
               </div>
 
-              <div className="glass-subpanel rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2 text-xs text-slate-300">
+              <div className="glass-subpanel rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2 text-xs text-[#94a3b8]">
                 <span>Pemutar Interaktif YouTube</span>
-                <span className="font-mono tabular-nums text-[#00E5A3]">
+                <span className="font-mono tabular-nums text-[#2dd4bf]">
                   Durasi: {formatVideoTimestamp(videoData.durationSec)}
                 </span>
               </div>
             </div>
           ) : (
-            <div className="rounded-xl bg-slate-950 border border-white/10 p-6 flex flex-col items-center justify-center text-center gap-3 min-h-[220px]">
+            <div className="rounded-xl bg-[#0b0c0e] border border-white/[0.08] p-6 flex flex-col items-center justify-center text-center gap-3 min-h-[220px]">
               {videoData.coverUrl && (
                 <img
                   src={videoData.coverUrl}
@@ -432,18 +441,20 @@ export const UnifiedVideoCaptionSection: React.FC<
                   className="w-32 h-44 object-cover rounded-lg border border-white/10"
                 />
               )}
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-[#94a3b8]">
                 Stream video langsung tidak tersedia. Gunakan tombol Buka Video Asli di kanan atas.
               </p>
             </div>
           )}
         </div>
 
-        {/* RIGHT COLUMN: Unified Creator Info, Full Caption Details & Preset Summary */}
-        <div className="lg:col-span-7 flex flex-col justify-between gap-4">
+        {/* RIGHT COLUMN: Unified Creator Info & Full Caption Details */}
+        <div className="w-full lg:w-7/12 min-w-0 flex flex-col justify-between gap-4">
           <div className="flex-1 flex flex-col gap-4">
-            {/* 1. Creator & Metadata Header Card */}
-            <div className="glass-subpanel rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div
+              {...liquidPointerHandlers}
+              className="glass-subpanel transform-gpu rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            >
               <div className="flex items-center gap-3 min-w-0">
                 {videoData.author.avatar ? (
                   <img
@@ -453,24 +464,24 @@ export const UnifiedVideoCaptionSection: React.FC<
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                     }}
-                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover border border-[#00E5A3]/30 shrink-0"
+                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover border border-[#2dd4bf]/35 shrink-0"
                   />
                 ) : (
-                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#00E5A3]/15 border border-[#00E5A3]/30 flex items-center justify-center text-[#00E5A3] shrink-0">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#2dd4bf]/15 border border-[#2dd4bf]/30 flex items-center justify-center text-[#2dd4bf] shrink-0">
                     <User className="w-5 h-5" aria-hidden="true" />
                   </div>
                 )}
 
                 <div className="min-w-0 space-y-0.5">
-                  <div className="text-sm sm:text-base font-bold text-white truncate">
+                  <div className="text-sm sm:text-base font-bold text-[#f1f5f9] truncate">
                     {videoData.author.nickname}
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-slate-400 font-mono tabular-nums">
-                    <span className="text-[#00E5A3]">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-[#94a3b8] font-mono tabular-nums">
+                    <span className="text-[#2dd4bf]">
                       @{videoData.author.uniqueId}
                     </span>
                     <span aria-hidden="true">·</span>
-                    <span>
+                    <span className="text-[#38bdf8]">
                       {formatVideoTimestamp(videoData.durationSec)}
                     </span>
                     <span aria-hidden="true">·</span>
@@ -482,11 +493,12 @@ export const UnifiedVideoCaptionSection: React.FC<
               {videoData.playUrl && onJumpToQrScanner && (
                 <button
                   type="button"
+                  {...liquidPointerHandlers}
                   onClick={onJumpToQrScanner}
-                  className="w-full sm:w-auto min-h-[40px] px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="liquid-btn-secondary transform-gpu w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <ScanLine
-                    className="w-3.5 h-3.5 text-[#00E5A3]"
+                    className="w-3.5 h-3.5 text-[#2dd4bf]"
                     aria-hidden="true"
                   />
                   <span>Panel Scan QR Video</span>
@@ -494,18 +506,17 @@ export const UnifiedVideoCaptionSection: React.FC<
               )}
             </div>
 
-            {/* 2. Detail Caption & Deskripsi Video */}
-            <div className="flex-1 flex flex-col gap-2.5">
+            <div className="flex-1 flex flex-col gap-2.5 min-w-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="space-y-0.5">
-                  <h3 className="text-xs sm:text-sm font-semibold text-white">
+                  <h3 className="text-xs sm:text-sm font-semibold text-[#f1f5f9]">
                     {videoData.platform === 'youtube'
                       ? 'Detail Judul & Deskripsi Video YouTube'
                       : 'Detail Caption Video'}
                   </h3>
-                  <p className="text-xs text-slate-400 font-mono tabular-nums">
-                    {captionLinksCount} tautan caption · {commentLinksCount}{' '}
-                    tautan komentar
+                  <p className="text-xs text-[#94a3b8] font-mono tabular-nums">
+                    <span className="text-[#2dd4bf]">{captionLinksCount} tautan caption</span> ·{' '}
+                    <span className="text-[#38bdf8]">{commentLinksCount} tautan komentar</span>
                   </p>
                 </div>
 
@@ -513,8 +524,9 @@ export const UnifiedVideoCaptionSection: React.FC<
                   {isLongCaption && (
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={() => setIsCaptionExpanded((prev) => !prev)}
-                      className="flex-1 sm:flex-initial min-h-[38px] px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-white/10 text-xs font-medium text-slate-300 hover:text-white transition-colors flex items-center justify-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
+                      className="liquid-btn-secondary transform-gpu flex-1 sm:flex-initial min-h-[40px] sm:min-h-[38px] px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       {isCaptionExpanded ? (
                         <span
@@ -538,9 +550,10 @@ export const UnifiedVideoCaptionSection: React.FC<
 
                   <button
                     type="button"
+                    {...liquidPointerHandlers}
                     onClick={handleCopyCaption}
                     disabled={!videoData.caption}
-                    className="flex-1 sm:flex-initial min-h-[38px] px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-xs font-semibold text-slate-200 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                    className="liquid-btn-secondary transform-gpu flex-1 sm:flex-initial min-h-[40px] sm:min-h-[38px] px-3 py-1.5 rounded-lg disabled:opacity-50 text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     {copiedCaption ? (
                       <span
@@ -548,10 +561,10 @@ export const UnifiedVideoCaptionSection: React.FC<
                         className="animate-state-pop flex items-center gap-1.5"
                       >
                         <Check
-                          className="w-3.5 h-3.5 text-[#00E5A3]"
+                          className="w-3.5 h-3.5 text-[#10b981]"
                           aria-hidden="true"
                         />
-                        <span className="text-[#00E5A3]">Caption Tersalin</span>
+                        <span className="text-[#2dd4bf]">Caption Tersalin</span>
                       </span>
                     ) : (
                       <span
@@ -568,7 +581,7 @@ export const UnifiedVideoCaptionSection: React.FC<
 
               {videoData.title &&
                 videoData.platform === 'youtube' && (
-                  <div className="px-3.5 py-2.5 rounded-xl bg-slate-900/90 border border-white/[0.08] text-xs sm:text-sm font-semibold text-white">
+                  <div className="glass-subpanel px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-[#f1f5f9] break-words">
                     {videoData.title}
                   </div>
                 )}
@@ -576,7 +589,7 @@ export const UnifiedVideoCaptionSection: React.FC<
               <div
                 key={isCaptionExpanded ? 'caption-exp' : 'caption-col'}
                 data-testid="unified-video-caption-box"
-                className={`flex-1 bg-slate-950/75 p-4 rounded-xl border border-white/[0.08] text-xs sm:text-sm text-slate-200 whitespace-pre-wrap font-mono leading-relaxed overflow-y-auto transition-all min-h-[180px] animate-expand-reveal ${
+                className={`flex-1 glass-subpanel p-4 rounded-xl text-xs sm:text-sm text-[#f1f5f9] whitespace-pre-wrap break-all font-mono leading-relaxed overflow-y-auto transition-all min-h-[180px] animate-expand-reveal url-wrap-box ${
                   isCaptionExpanded ? 'max-h-[440px]' : 'max-h-[280px]'
                 }`}
               >
@@ -585,13 +598,12 @@ export const UnifiedVideoCaptionSection: React.FC<
             </div>
           </div>
 
-          {/* 3. Unified Footer Summary inside Right Column */}
           <div className="pt-3 border-t border-white/[0.08] space-y-2.5">
             {detectedQr ? (
-              <div className="px-4 py-3 rounded-xl bg-[#00E5A3]/10 border border-[#00E5A3]/30 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="text-slate-200 break-all">
+              <div className="glass-subpanel px-4 py-3 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="text-[#f1f5f9] break-all">
                   QR Code Video Terdeteksi:{' '}
-                  <strong className="font-mono text-[#00E5A3]">
+                  <strong className="font-mono text-[#2dd4bf]">
                     {detectedQr.resolvedAlightCreativeUrl ||
                       detectedQr.rawPayload}
                   </strong>
@@ -603,16 +615,16 @@ export const UnifiedVideoCaptionSection: React.FC<
                   }
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-semibold text-[#00E5A3] hover:underline whitespace-nowrap shrink-0"
+                  className="font-semibold text-[#2dd4bf] hover:underline whitespace-nowrap shrink-0"
                 >
                   Buka di Alight Motion →
                 </a>
               </div>
             ) : (
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 font-mono tabular-nums">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#94a3b8] font-mono tabular-nums">
                 <span>
                   Status Ekstraksi:{' '}
-                  <strong className="text-slate-200 font-sans">
+                  <strong className="text-[#f1f5f9] font-sans">
                     {captionLinksCount + commentLinksCount > 0
                       ? `${captionLinksCount + commentLinksCount} Tautan Preset Ditemukan`
                       : 'Memindai Tautan & Kode QR Video'}

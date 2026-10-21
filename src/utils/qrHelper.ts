@@ -40,10 +40,10 @@ export function scanCanvasForQr(
     return null;
   }
 
-  // Highlight QR detection box on canvas with Alight Motion Neon Green (#00E5A3)
+  // Highlight QR detection box on canvas with Warm Apricot (#FDBA74)
   const loc = code.location;
   ctx.save();
-  ctx.strokeStyle = '#00E5A3';
+  ctx.strokeStyle = '#FDBA74';
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
@@ -53,7 +53,7 @@ export function scanCanvasForQr(
   ctx.closePath();
   ctx.stroke();
 
-  ctx.fillStyle = 'rgba(0, 229, 163, 0.16)';
+  ctx.fillStyle = 'rgba(253, 186, 116, 0.2)';
   ctx.fill();
   ctx.restore();
 

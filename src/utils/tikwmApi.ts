@@ -6,6 +6,7 @@ import {
   normalizeRawTikwmComment,
   normalizeRawTikwmReply,
   extractPresetLinksFromCommentsAndReplies,
+  parsePresetLinks,
 } from './presetParser';
 
 export interface SocialVideoData {
@@ -29,6 +30,25 @@ export interface SocialVideoData {
   youtubeComments?: TikTokCommentThread[];
 }
 
+export interface KeywordPresetSearchResultItem {
+  id: string;
+  sourceUrl: string;
+  platform: 'tiktok' | 'youtube';
+  title: string;
+  caption: string;
+  soundTitle: string;
+  viewCount: number;
+  likeCount: number;
+  durationSec: number;
+  coverUrl: string;
+  author: {
+    uniqueId: string;
+    nickname: string;
+    avatar: string;
+  };
+  extractedLinks: ExtractedPresetLink[];
+}
+
 export interface TikTokCommentsScanResult {
   threads: TikTokCommentThread[];
   extractedLinks: ExtractedPresetLink[];
@@ -50,12 +70,91 @@ function normalizeTikwmVideoUrl(rawUrl: string | undefined): string {
 }
 
 /**
+ * Searches preset videos by keyword, song title, or creator name and extracts
+ * Alight Motion preset links (5MB / XML / Drive / Shortlink) from descriptions/captions.
+ */
+export async function searchPresetVideosByKeyword(
+  rawQuery: string
+): Promise<KeywordPresetSearchResultItem[]> {
+  const query = rawQuery.trim();
+  if (!query) {
+    throw new Error(
+      'Ketik kata kunci preset, nama lagu, atau nama kreator terlebih dahulu.'
+    );
+  }
+
+  const resultsMap = new Map<string, KeywordPresetSearchResultItem>();
+
+  // 1. Primary search via /api/search-presets (extracts full descriptions & unwrapped preset links)
+  try {
+    const res = await fetch(
+      `/api/search-presets?q=${encodeURIComponent(query)}`,
+      {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      }
+    );
+
+    if (res.ok) {
+      const payload = await res.json();
+      const rawItems = Array.isArray(payload?.data?.items)
+        ? payload.data.items
+        : [];
+
+      for (const item of rawItems) {
+        const captionText = String(item.caption || item.title || '').trim();
+        const parsed = parsePresetLinks(captionText);
+        if (parsed.all.length > 0) {
+          // Clean internal extraction footer from visible caption while keeping clean description
+          const visibleCaption = captionText
+            .split('[Tautan Lengkap Ekstraksi Deskripsi]:')[0]
+            .trim();
+
+          resultsMap.set(`yt-${item.id}`, {
+            id: String(item.id),
+            sourceUrl: String(
+              item.sourceUrl || `https://www.youtube.com/watch?v=${item.id}`
+            ),
+            platform: 'youtube',
+            title: String(item.title || visibleCaption.split('\n')[0] || ''),
+            caption: visibleCaption,
+            soundTitle: String(
+              item.soundTitle ||
+                `Original Sound — @${item.author?.uniqueId || 'creator'}`
+            ),
+            viewCount: Number(item.viewCount) || 0,
+            likeCount: Number(item.likeCount) || 0,
+            durationSec: Number(item.durationSec) || 0,
+            coverUrl: String(item.coverUrl || ''),
+            author: {
+              uniqueId: String(item.author?.uniqueId || 'creator').replace(
+                /^@/,
+                ''
+              ),
+              nickname: String(item.author?.nickname || 'Creator'),
+              avatar: String(item.author?.avatar || ''),
+            },
+            extractedLinks: parsed.all,
+          });
+        }
+      }
+    }
+  } catch {
+    // Ignore transient network errors
+  }
+
+  return Array.from(resultsMap.values());
+}
+
+/**
  * Fetches real video metadata & caption/description from TikTok, Instagram, or YouTube.
  * - For YouTube: calls `/api/youtube?url={VIDEO_URL}` to extract full title, description, and top/pinned comments.
  * - For TikTok / Instagram: calls `https://www.tikwm.com/api/?url={VIDEO_URL}` with `/api/tikwm` proxy fallback.
  * Never generates dummy, mock, or fabricated URLs.
  */
-export async function fetchSocialVideoData(rawInputUrl: string): Promise<SocialVideoData> {
+export async function fetchSocialVideoData(
+  rawInputUrl: string
+): Promise<SocialVideoData> {
   const validation = validateSocialUrl(rawInputUrl);
   if (!validation.isValid || !validation.platform) {
     throw new Error(validation.error || 'URL tidak valid.');
@@ -71,7 +170,11 @@ export async function fetchSocialVideoData(rawInputUrl: string): Promise<SocialV
       }
     );
 
-    let ytPayload: { code?: number; msg?: string; data?: Record<string, any> } | null = null;
+    let ytPayload: {
+      code?: number;
+      msg?: string;
+      data?: Record<string, any>;
+    } | null = null;
     try {
       ytPayload = await ytRes.json();
     } catch {
@@ -125,11 +228,17 @@ export async function fetchSocialVideoData(rawInputUrl: string): Promise<SocialV
     };
   }
 
-  let jsonPayload: { code?: number; msg?: string; data?: Record<string, any> } | null = null;
+  let jsonPayload: {
+    code?: number;
+    msg?: string;
+    data?: Record<string, any>;
+  } | null = null;
 
   // 1. Direct frontend call to https://www.tikwm.com/api/?url={VIDEO_URL}
   try {
-    const directEndpoint = `https://www.tikwm.com/api/?url=${encodeURIComponent(validation.normalizedUrl)}`;
+    const directEndpoint = `https://www.tikwm.com/api/?url=${encodeURIComponent(
+      validation.normalizedUrl
+    )}`;
     const response = await fetch(directEndpoint, {
       method: 'GET',
       headers: {
@@ -145,7 +254,9 @@ export async function fetchSocialVideoData(rawInputUrl: string): Promise<SocialV
 
   // 2. Fallback to same-origin /api/tikwm proxy if direct browser request failed or hit rate limit
   if (!jsonPayload || jsonPayload.code !== 0 || !jsonPayload.data) {
-    const proxyEndpoint = `/api/tikwm?url=${encodeURIComponent(validation.normalizedUrl)}`;
+    const proxyEndpoint = `/api/tikwm?url=${encodeURIComponent(
+      validation.normalizedUrl
+    )}`;
     const proxyRes = await fetch(proxyEndpoint, {
       method: 'GET',
       headers: {
@@ -169,7 +280,9 @@ export async function fetchSocialVideoData(rawInputUrl: string): Promise<SocialV
   const coverUrl = normalizeTikwmVideoUrl(d.cover || d.origin_cover);
 
   if (!playUrl) {
-    throw new Error('URL video tanpa watermark (play) tidak ditemukan pada respons API.');
+    throw new Error(
+      'URL video tanpa watermark (play) tidak ditemukan pada respons API.'
+    );
   }
 
   return {
@@ -207,7 +320,11 @@ export async function fetchTikTokCommentsPage(options: {
   total: number;
 }> {
   const { videoUrlOrId, creatorUniqueId, cursor = 0, count = 50 } = options;
-  let payload: { code?: number; msg?: string; data?: Record<string, any> } | null = null;
+  let payload: {
+    code?: number;
+    msg?: string;
+    data?: Record<string, any>;
+  } | null = null;
 
   // Prefer same-origin rate-limit-queued endpoint first so rapid calls after video fetch never fail
   try {
@@ -279,13 +396,25 @@ export async function fetchTikTokCommentReplies(options: {
   cursor: number;
   hasMore: boolean;
 }> {
-  const { videoId, commentId, creatorUniqueId, cursor = 0, count = 50 } = options;
-  let payload: { code?: number; msg?: string; data?: Record<string, any> } | null = null;
+  const {
+    videoId,
+    commentId,
+    creatorUniqueId,
+    cursor = 0,
+    count = 50,
+  } = options;
+  let payload: {
+    code?: number;
+    msg?: string;
+    data?: Record<string, any>;
+  } | null = null;
 
   try {
     const proxyUrl = `/api/tikwm/replies?video_id=${encodeURIComponent(
       videoId
-    )}&comment_id=${encodeURIComponent(commentId)}&count=${count}&cursor=${cursor}`;
+    )}&comment_id=${encodeURIComponent(
+      commentId
+    )}&count=${count}&cursor=${cursor}`;
     const res = await fetch(proxyUrl, {
       method: 'GET',
       headers: { Accept: 'application/json' },
@@ -301,7 +430,9 @@ export async function fetchTikTokCommentReplies(options: {
     try {
       const directUrl = `https://www.tikwm.com/api/comment/reply?video_id=${encodeURIComponent(
         videoId
-      )}&comment_id=${encodeURIComponent(commentId)}&count=${count}&cursor=${cursor}`;
+      )}&comment_id=${encodeURIComponent(
+        commentId
+      )}&count=${count}&cursor=${cursor}`;
       const directRes = await fetch(directUrl, {
         method: 'GET',
         headers: { Accept: 'application/json' },
@@ -315,9 +446,7 @@ export async function fetchTikTokCommentReplies(options: {
   }
 
   if (!payload || payload.code !== 0 || !payload.data) {
-    throw new Error(
-      payload?.msg || 'Gagal mengambil balasan komentar TikTok.'
-    );
+    throw new Error(payload?.msg || 'Gagal mengambil balasan komentar TikTok.');
   }
 
   const rawReplies = Array.isArray(payload.data.comments)
@@ -373,7 +502,11 @@ export async function scanTikTokVideoCommentsAndReplies(options: {
         let s = 0;
         if (c.isCreator) s += 1000;
         if (c.extractedLinks.length > 0) s += 500;
-        if (/(preset|link|alight|am|5mb|xml|mana|spill|bagi|minta|drive)/i.test(c.text)) {
+        if (
+          /(preset|link|alight|am|5mb|xml|mana|spill|bagi|minta|drive)/i.test(
+            c.text
+          )
+        ) {
           s += 300;
         }
         s += Math.min(200, c.diggCount);
@@ -386,7 +519,9 @@ export async function scanTikTokVideoCommentsAndReplies(options: {
   for (let i = 0; i < candidatesWithReplies.length; i++) {
     const targetThread = candidatesWithReplies[i];
     onProgress?.(
-      `Memindai balasan komentar @${targetThread.user.uniqueId} (${i + 1}/${candidatesWithReplies.length})...`
+      `Memindai balasan komentar @${targetThread.user.uniqueId} (${i + 1}/${
+        candidatesWithReplies.length
+      })...`
     );
     try {
       // eslint-disable-next-line no-await-in-loop

@@ -3,7 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef,
+} from 'react';
 import {
   Link2,
   MessageSquareText,
@@ -12,8 +18,6 @@ import {
   CheckCircle2,
   Loader2,
   AlertCircle,
-  User,
-  Download,
   RotateCcw,
   MessageSquare,
   ExternalLink,
@@ -36,6 +40,7 @@ import {
   fetchSocialVideoData,
   scanTikTokVideoCommentsAndReplies,
   SocialVideoData,
+  KeywordPresetSearchResultItem,
 } from './utils/tikwmApi';
 import { QrScanDetection } from './utils/qrHelper';
 import { VideoQrScannerPanel } from './components/VideoQrScannerPanel';
@@ -43,6 +48,7 @@ import { UnifiedVideoCaptionSection } from './components/UnifiedVideoCaptionSect
 import { TikTokCommentsScannerPanel } from './components/TikTokCommentsScannerPanel';
 import { PresetResultsList } from './components/PresetResultsList';
 import { QrImageUploadTab } from './components/QrImageUploadTab';
+import { KeywordPresetSearchTab } from './components/KeywordPresetSearchTab';
 import {
   PresetHistorySection,
   PresetHistoryRecord,
@@ -57,8 +63,20 @@ import {
   WelcomeModal,
   SOCIABUZZ_SUPPORT_URL,
 } from './components/WelcomeModal';
+import {
+  AmLogoSvg,
+  HeroLogoWatermark,
+  CardCornerWatermark,
+} from './components/AmLogoWatermark';
+import {
+  InitialLoadingScreen,
+  SearchLoadingOverlay,
+} from './components/LoadingScreen';
+import { liquidPointerHandlers } from './utils/liquidGlass';
 
-type ActiveTab = 'url' | 'text' | 'qr-image';
+type ActiveTab = 'url' | 'keyword-search' | 'text' | 'qr-image';
+
+const TAB_ORDER: ActiveTab[] = ['url', 'keyword-search', 'text', 'qr-image'];
 
 const STORAGE_KEY = 'am_preset_finder_history_v2';
 const LEGACY_STORAGE_KEY = 'am_preset_finder_history_v1';
@@ -74,12 +92,36 @@ export default function App() {
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const tab2UrlInputRef = useRef<HTMLInputElement | null>(null);
   const commentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const pillTimerRef = useRef<number | null>(null);
+
+  // Refs for accurate top navbar capsule sliding pill measurement
+  const navContainerRef = useRef<HTMLDivElement | null>(null);
+  const navButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [navPillGeometry, setNavPillGeometry] = useState<{
+    left: number;
+    width: number;
+    ready: boolean;
+  }>({ left: 5, width: 0, ready: false });
+
+  // Refs for accurate main mode switcher sliding pill measurement
+  const tabSwitcherContainerRef = useRef<HTMLDivElement | null>(null);
+  const tabButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [tabPillGeometry, setTabPillGeometry] = useState<{
+    left: number;
+    width: number;
+    ready: boolean;
+  }>({ left: 0, width: 0, ready: false });
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      if (tabParam === 'url' || tabParam === 'text' || tabParam === 'qr-image') {
+      if (
+        tabParam === 'url' ||
+        tabParam === 'keyword-search' ||
+        tabParam === 'text' ||
+        tabParam === 'qr-image'
+      ) {
         return tabParam;
       }
     } catch {
@@ -88,24 +130,57 @@ export default function App() {
     return 'url';
   });
 
-  // Legal Modal State (Terms of Service & Privacy Policy)
-  const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocType | null>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const legalParam = params.get('legal');
-      if (legalParam === 'tos' || legalParam === 'privacy') {
-        return legalParam;
-      }
-    } catch {
-      // Ignore
+  // Explicit states to hide History & Results by default before link is pasted or searched
+  const [hasPastedOrSearched, setHasPastedOrSearched] =
+    useState<boolean>(false);
+  const [isHistoryVisible, setIsHistoryVisible] = useState<boolean>(false);
+
+  // Sliding Liquid Pill Spring State
+  const [isSlidingPill, setIsSlidingPill] = useState<boolean>(false);
+
+  const triggerPillSlideBounce = useCallback(() => {
+    setIsSlidingPill(true);
+    if (pillTimerRef.current !== null) {
+      window.clearTimeout(pillTimerRef.current);
     }
-    return null;
-  });
+    pillTimerRef.current = window.setTimeout(() => {
+      setIsSlidingPill(false);
+    }, 300);
+  }, []);
 
-  // Toggle for History Section (hidden by default so only the search column & instructions show initially)
-  const [showHistorySection, setShowHistorySection] = useState<boolean>(false);
+  const handleSelectTab = useCallback(
+    (nextTab: ActiveTab) => {
+      triggerPillSlideBounce();
+      setActiveTab(nextTab);
+    },
+    [triggerPillSlideBounce]
+  );
 
-  // Welcome Modal State (shown on initial home page visit unless deep-linked via ?url= or ?autostart=1)
+  useEffect(() => {
+    return () => {
+      if (pillTimerRef.current !== null) {
+        window.clearTimeout(pillTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Legal Modal State (Terms of Service & Privacy Policy)
+  const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocType | null>(
+    () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const legalParam = params.get('legal');
+        if (legalParam === 'tos' || legalParam === 'privacy') {
+          return legalParam;
+        }
+      } catch {
+        // Ignore
+      }
+      return null;
+    }
+  );
+
+  // Welcome Modal State
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -170,7 +245,7 @@ export default function App() {
   const [commentExtractedPresetLinks, setCommentExtractedPresetLinks] =
     useState<ExtractedPresetLink[]>([]);
 
-  // Tab 2: Filter Teks / Komentar & Pemindai Komentar TikTok State
+  // Tab: Filter Teks / Komentar & Pemindai Komentar TikTok State
   const [tab2TiktokUrl, setTab2TiktokUrl] = useState<string>('');
   const [tab2VideoMeta, setTab2VideoMeta] = useState<SocialVideoData | null>(
     null
@@ -183,6 +258,7 @@ export default function App() {
   const [hasAnalyzedComment, setHasAnalyzedComment] = useState<boolean>(false);
 
   const resetUrlSearchResults = useCallback(() => {
+    setIsLoadingUrl(false);
     setHasSearchedUrl(false);
     setCurrentVideoData(null);
     setCaptionExtractedLinks([]);
@@ -196,6 +272,7 @@ export default function App() {
   }, []);
 
   const resetTab2SearchResults = useCallback(() => {
+    setIsScanningComments(false);
     setHasAnalyzedComment(false);
     setTab2VideoMeta(null);
     setCommentExtractedLinks([]);
@@ -206,8 +283,18 @@ export default function App() {
     setCommentExtractedPresetLinks([]);
   }, []);
 
+  const handleClearUrlInputAndReset = useCallback(() => {
+    setUrlInput('');
+    setUrlError(null);
+    resetUrlSearchResults();
+    setHasPastedOrSearched(false);
+    setIsHistoryVisible(false);
+    urlInputRef.current?.focus();
+  }, [resetUrlSearchResults]);
+
   const handlePasteToUrlInput = async () => {
     setUrlError(null);
+    setHasPastedOrSearched(true);
     try {
       if (navigator.clipboard && navigator.clipboard.readText) {
         const clipText = await navigator.clipboard.readText();
@@ -234,6 +321,7 @@ export default function App() {
 
   const handlePasteToTab2UrlInput = async () => {
     setCommentError(null);
+    setHasPastedOrSearched(true);
     try {
       if (navigator.clipboard && navigator.clipboard.readText) {
         const clipText = await navigator.clipboard.readText();
@@ -260,6 +348,7 @@ export default function App() {
 
   const handlePasteToCommentTextarea = async () => {
     setCommentError(null);
+    setHasPastedOrSearched(true);
     try {
       if (navigator.clipboard && navigator.clipboard.readText) {
         const clipText = await navigator.clipboard.readText();
@@ -315,6 +404,21 @@ export default function App() {
       return [newRecord, ...filtered].slice(0, 30);
     });
   }, []);
+
+  const handleKeywordPresetSavedToHistory = useCallback(
+    (item: KeywordPresetSearchResultItem) => {
+      upsertHistoryRecord({
+        id: `kw-${item.id}`,
+        title: item.title || `Preset ${item.soundTitle}`,
+        authorHandle: `@${item.author.uniqueId}`,
+        sourceMode: 'url',
+        sourceUrl: item.sourceUrl,
+        createdAtIso: new Date().toISOString(),
+        links: item.extractedLinks,
+      });
+    },
+    [upsertHistoryRecord]
+  );
 
   const runTikTokCommentsAndRepliesScan = useCallback(
     async (
@@ -395,6 +499,8 @@ export default function App() {
         );
         return;
       }
+
+      setHasPastedOrSearched(true);
 
       const directPresetParse = parsePresetLinks(trimmed);
       if (
@@ -544,6 +650,7 @@ export default function App() {
         setCommentExtractedLinks(
           mergeUniquePresetLinks(manualParsed, extractedFromComments)
         );
+        setHasPastedOrSearched(true);
         setHasAnalyzedComment(true);
       }
 
@@ -621,6 +728,7 @@ export default function App() {
       return;
     }
 
+    setHasPastedOrSearched(true);
     setIsScanningComments(true);
     setCommentScanStatusText(
       validation.platform === 'youtube'
@@ -705,6 +813,8 @@ export default function App() {
       return;
     }
 
+    setHasPastedOrSearched(true);
+
     const singleLineCheck = validateSocialUrl(trimmed);
     if (
       singleLineCheck.isValid &&
@@ -747,6 +857,7 @@ export default function App() {
       sourceLabel: string;
       detection: QrScanDetection;
     }) => {
+      setHasPastedOrSearched(true);
       const effectiveUrl =
         info.detection.resolvedAlightCreativeUrl || info.detection.rawPayload;
 
@@ -796,193 +907,429 @@ export default function App() {
     }
   };
 
-  return (
-    <div className="min-h-screen flex flex-col bg-[#060A14] text-slate-100 relative selection:bg-[#00E5A3]/25 selection:text-[#00E5A3]">
-      {/* Animated Liquid Glass Ambient Background Orbs & Refractive Caustics */}
-      <div
-        className="pointer-events-none fixed inset-0 overflow-hidden z-0"
-        aria-hidden="true"
-      >
-        <div className="liquid-orb-primary absolute -top-44 left-1/4 w-[360px] sm:w-[620px] h-[360px] sm:h-[620px] rounded-full bg-gradient-to-br from-[#00E5A3]/[0.09] via-[#2DD4BF]/[0.05] to-transparent blur-[90px] sm:blur-[130px]" />
-        <div className="liquid-orb-secondary absolute top-1/3 -right-36 w-[320px] sm:w-[520px] h-[320px] sm:h-[520px] rounded-full bg-gradient-to-tl from-[#38BDF8]/[0.08] via-[#0EA5E9]/[0.04] to-transparent blur-[95px] sm:blur-[140px]" />
-        <div className="liquid-sheen-bar hidden sm:block absolute -bottom-56 left-1/3 w-[680px] h-[420px] rounded-full bg-gradient-to-tr from-[#10B981]/[0.06] via-[#2DD4BF]/[0.04] to-transparent blur-[150px]" />
-      </div>
+  const activeTabIndex = Math.max(0, TAB_ORDER.indexOf(activeTab));
+  const activeNavIndex = isHistoryVisible ? 4 : activeTabIndex;
 
-      {/* Top Bar Contract: 1-row, 3-zone header (Compact 56px on mobile to stay well under 15% viewport height) */}
-      <header className="sticky top-0 z-30 glass-panel border-b border-white/[0.10]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-4 sm:gap-8">
-          {/* Zone 1: Brand Wordmark */}
+  // Derived flags for clean conditional rendering:
+  // When URL input is empty or not yet searched, force idle state
+  const isUrlTabIdle =
+    !isLoadingUrl &&
+    (!hasSearchedUrl || !urlInput.trim() || !hasPastedOrSearched);
+  const canShowUrlResults =
+    !isLoadingUrl &&
+    hasSearchedUrl &&
+    hasPastedOrSearched &&
+    Boolean(urlInput.trim());
+
+  const isTab2Idle =
+    !isScanningComments &&
+    (!hasAnalyzedComment ||
+      (!tab2TiktokUrl.trim() && !commentText.trim()) ||
+      !hasPastedOrSearched);
+  const canShowTab2Results =
+    hasPastedOrSearched &&
+    hasAnalyzedComment &&
+    Boolean(tab2TiktokUrl.trim() || commentText.trim());
+
+  // Measure the exact offsetLeft and offsetWidth of the active top navbar button & main mode tab button
+  const updatePillPositions = useCallback(() => {
+    const activeNavBtn = navButtonRefs.current[activeNavIndex];
+    if (activeNavBtn && activeNavBtn.offsetWidth > 0) {
+      setNavPillGeometry({
+        left: activeNavBtn.offsetLeft,
+        width: activeNavBtn.offsetWidth,
+        ready: true,
+      });
+    }
+
+    const activeModeBtn = tabButtonRefs.current[activeTabIndex];
+    if (activeModeBtn && activeModeBtn.offsetWidth > 0) {
+      setTabPillGeometry({
+        left: activeModeBtn.offsetLeft,
+        width: activeModeBtn.offsetWidth,
+        ready: true,
+      });
+    }
+  }, [activeNavIndex, activeTabIndex]);
+
+  useLayoutEffect(() => {
+    updatePillPositions();
+  }, [updatePillPositions, history.length, activeTab, isHistoryVisible]);
+
+  useEffect(() => {
+    const handleResize = () => updatePillPositions();
+    window.addEventListener('resize', handleResize, { passive: true });
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        updatePillPositions();
+      });
+      if (navContainerRef.current) observer.observe(navContainerRef.current);
+      if (tabSwitcherContainerRef.current) {
+        observer.observe(tabSwitcherContainerRef.current);
+      }
+      navButtonRefs.current.forEach((btn) => {
+        if (btn) observer?.observe(btn);
+      });
+      tabButtonRefs.current.forEach((btn) => {
+        if (btn) observer?.observe(btn);
+      });
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      observer?.disconnect();
+    };
+  }, [updatePillPositions]);
+
+  return (
+    <div className="min-h-screen max-w-[100vw] overflow-x-hidden flex flex-col bg-slate-950 text-[#f1f5f9] relative selection:bg-[#2dd4bf]/20 selection:text-[#38bdf8]">
+      {/* Lightweight Pure-CSS Radial-Gradient Ambient Glow (Zero Blur Filter, Zero Continuous Animation) */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] z-0 bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.15)_0%,transparent_70%)]"
+      />
+
+      {/* Top Bar Contract: ONLY element using backdrop-blur-md for 60fps mobile scroll */}
+      <header
+        {...liquidPointerHandlers}
+        className="sticky top-0 z-30 backdrop-blur-md bg-slate-950/85 border-b border-cyan-500/20 transform-gpu"
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2.5 sm:gap-4 min-w-0">
+          {/* Zone 1: Brand Wordmark with Logo Mark (shrink-0 so it never gets squished or overlapped) */}
           <a
             href="#top"
-            className="text-base sm:text-lg font-bold tracking-tight text-white font-display whitespace-nowrap shrink-0"
+            className="flex items-center gap-2 sm:gap-2.5 text-sm sm:text-lg font-bold tracking-tight font-display whitespace-nowrap shrink-0"
           >
-            AM Preset Finder
+            <img
+              src="/favicon.png"
+              alt=""
+              aria-hidden="true"
+              className="w-6 h-6 sm:w-7 sm:h-7 rounded-full object-cover border border-white/10 shrink-0"
+            />
+            <span className="text-liquid-gradient shrink-0">
+              AM Preset Finder
+            </span>
           </a>
 
-          {/* Zone 2: 4 Single-line Navigation Links */}
-          <nav
-            aria-label="Navigasi Utama"
-            className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-300"
-          >
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('url');
-                resetUrlSearchResults();
-              }}
-              className={`hover:text-[#00E5A3] transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                activeTab === 'url'
-                  ? 'text-[#00E5A3] underline underline-offset-8'
-                  : ''
-              }`}
+          {/* Zone 2: Wrapper with min-w-0 and flex-1 + scrollable flex-nowrap scroll-smooth container */}
+          <div className="min-w-0 flex-1 flex items-center justify-end md:justify-center">
+            <nav
+              aria-label="Navigasi Utama"
+              className="navbar-capsule-scroll min-w-0 max-w-full overflow-x-auto whitespace-nowrap flex-nowrap scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] rounded-full"
             >
-              URL Video
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('text');
-                resetTab2SearchResults();
-              }}
-              className={`hover:text-[#00E5A3] transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                activeTab === 'text'
-                  ? 'text-[#00E5A3] underline underline-offset-8'
-                  : ''
-              }`}
-            >
-              Komentar & Teks
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('qr-image')}
-              className={`hover:text-[#00E5A3] transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                activeTab === 'qr-image'
-                  ? 'text-[#00E5A3] underline underline-offset-8'
-                  : ''
-              }`}
-            >
-              Scan Gambar QR
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowHistorySection((prev) => {
-                  const next = !prev;
-                  if (next) {
-                    window.setTimeout(() => {
-                      document
-                        .getElementById('riwayat-preset')
-                        ?.scrollIntoView({ behavior: 'smooth' });
-                    }, 80);
-                  }
-                  return next;
-                });
-              }}
-              className={`hover:text-[#00E5A3] transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                showHistorySection
-                  ? 'text-[#00E5A3] underline underline-offset-8'
-                  : ''
-              }`}
-            >
-              Riwayat Preset {history.length > 0 ? `(${history.length})` : ''}
-            </button>
-          </nav>
+              <div
+                ref={navContainerRef}
+                {...liquidPointerHandlers}
+                className="navbar-capsule-container transform-gpu flex-nowrap whitespace-nowrap overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+              >
+                <div
+                  aria-hidden="true"
+                  data-testid="sliding-liquid-nav-pill"
+                  style={{
+                    left: `${navPillGeometry.left}px`,
+                    width: `${navPillGeometry.width}px`,
+                    opacity: navPillGeometry.ready ? 1 : 0,
+                    transform: `scale(${isSlidingPill ? 1.02 : 1})`,
+                  }}
+                  className="sliding-liquid-pill transform-gpu absolute inset-y-[5px] rounded-full z-0"
+                />
 
-          {/* Zone 3: 1 Primary Action */}
-          <div className="flex items-center shrink-0">
+                <button
+                  ref={(el) => {
+                    navButtonRefs.current[0] = el;
+                  }}
+                  type="button"
+                  {...liquidPointerHandlers}
+                  onClick={() => {
+                    setIsHistoryVisible(false);
+                    handleSelectTab('url');
+                  }}
+                  className={`navbar-capsule-item transform-gpu shrink-0 whitespace-nowrap ${
+                    activeNavIndex === 0
+                      ? 'text-[#f1f5f9]'
+                      : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                  }`}
+                >
+                  <span>🔗 URL Video</span>
+                </button>
+
+                <button
+                  ref={(el) => {
+                    navButtonRefs.current[1] = el;
+                  }}
+                  type="button"
+                  {...liquidPointerHandlers}
+                  onClick={() => {
+                    setIsHistoryVisible(false);
+                    handleSelectTab('keyword-search');
+                  }}
+                  className={`navbar-capsule-item transform-gpu shrink-0 whitespace-nowrap ${
+                    activeNavIndex === 1
+                      ? 'text-[#f1f5f9]'
+                      : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                  }`}
+                >
+                  <span>🔍 Cari Preset</span>
+                </button>
+
+                <button
+                  ref={(el) => {
+                    navButtonRefs.current[2] = el;
+                  }}
+                  type="button"
+                  {...liquidPointerHandlers}
+                  onClick={() => {
+                    setIsHistoryVisible(false);
+                    handleSelectTab('text');
+                  }}
+                  className={`navbar-capsule-item transform-gpu shrink-0 whitespace-nowrap ${
+                    activeNavIndex === 2
+                      ? 'text-[#f1f5f9]'
+                      : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                  }`}
+                >
+                  <span>Komentar & Teks</span>
+                </button>
+
+                <button
+                  ref={(el) => {
+                    navButtonRefs.current[3] = el;
+                  }}
+                  type="button"
+                  {...liquidPointerHandlers}
+                  onClick={() => {
+                    setIsHistoryVisible(false);
+                    handleSelectTab('qr-image');
+                  }}
+                  className={`navbar-capsule-item transform-gpu shrink-0 whitespace-nowrap ${
+                    activeNavIndex === 3
+                      ? 'text-[#f1f5f9]'
+                      : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                  }`}
+                >
+                  <span>Scan Gambar QR</span>
+                </button>
+
+                <button
+                  ref={(el) => {
+                    navButtonRefs.current[4] = el;
+                  }}
+                  type="button"
+                  {...liquidPointerHandlers}
+                  onClick={() => {
+                    triggerPillSlideBounce();
+                    setIsHistoryVisible((prev) => {
+                      const next = !prev;
+                      if (next) {
+                        window.setTimeout(() => {
+                          document
+                            .getElementById('riwayat-preset')
+                            ?.scrollIntoView({ behavior: 'smooth' });
+                        }, 80);
+                      }
+                      return next;
+                    });
+                  }}
+                  className={`navbar-capsule-item transform-gpu shrink-0 whitespace-nowrap ${
+                    activeNavIndex === 4
+                      ? 'text-[#f1f5f9]'
+                      : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                  }`}
+                >
+                  <span>
+                    Riwayat Preset
+                    {history.length > 0 ? ` (${history.length})` : ''}
+                  </span>
+                </button>
+              </div>
+            </nav>
+          </div>
+
+          {/* Zone 3: Primary Action Button (shrink-0) */}
+          <div className="hidden lg:flex items-center shrink-0">
             <button
               type="button"
-              onClick={() => setActiveTab('qr-image')}
-              className="min-h-[38px] sm:min-h-[40px] px-3.5 sm:px-4 py-2 text-xs font-semibold text-slate-950 bg-[#00E5A3] hover:bg-[#00cca0] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              {...liquidPointerHandlers}
+              onClick={() => {
+                setIsHistoryVisible(false);
+                handleSelectTab('qr-image');
+              }}
+              className="liquid-btn-primary transform-gpu min-h-[38px] px-3.5 py-2 text-xs font-semibold active:scale-95 rounded-xl flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
             >
-              Scan QR Galeri
+              <QrCode
+                className="w-3.5 h-3.5 text-[#2dd4bf] shrink-0"
+                aria-hidden="true"
+              />
+              <span>Scan QR Galeri</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content Container — Airy, modern max-w-5xl workspace */}
+      {/* Main Content Container */}
       <main
         id="top"
-        className="relative z-10 flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-5 sm:py-10 space-y-5 sm:space-y-8"
+        className="relative z-10 flex-1 max-w-5xl w-full min-w-0 overflow-x-hidden mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-10 space-y-5 sm:space-y-8"
       >
-        {/* Clean, Uncluttered Hero & Mode Switcher */}
-        <section className="space-y-4 sm:space-y-6">
-          <div className="max-w-2xl space-y-1.5 sm:space-y-2.5">
-            <div className="text-[11px] sm:text-xs font-mono text-[#00E5A3]">
-              Ekstraktor Preset Alight Motion · TikTok, Instagram & YouTube
+        {/* Hero & Mode Switcher with Subtle Large Logo Watermark */}
+        <section className="relative space-y-4 sm:space-y-6">
+          {/* 2a) Hero Background Watermark Silhouette */}
+          <HeroLogoWatermark />
+
+          <div className="relative z-10 max-w-2xl space-y-1.5 sm:space-y-2.5">
+            <div className="inline-flex items-center gap-2 text-[11px] sm:text-xs font-mono text-[#2dd4bf]">
+              <AmLogoSvg className="w-4 h-4 shrink-0" />
+              <span>
+                Ekstraktor Preset Alight Motion · TikTok, Instagram & YouTube
+              </span>
             </div>
-            <h1 className="text-xl sm:text-4xl font-bold text-white tracking-tight font-display [text-wrap:balance]">
-              Temukan & Ekstrak Tautan Preset Alight Motion dengan Cepat
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#f1f5f9] tracking-tight font-display [text-wrap:balance]">
+              Temukan & Ekstrak{' '}
+              <span className="text-liquid-gradient">
+                Tautan Preset Alight Motion
+              </span>{' '}
+              dengan Cepat
             </h1>
-            <p className="hidden sm:block text-sm sm:text-base text-slate-300 leading-relaxed">
-              Deteksi otomatis tautan preset dari video TikTok, Instagram, dan YouTube, kolom komentar beserta balasan, maupun tangkapan layar kode QR secara utuh.
+            <p className="hidden sm:block text-sm sm:text-base text-[#94a3b8] leading-relaxed">
+              Deteksi otomatis tautan preset dari video TikTok, Instagram, dan
+              YouTube, pencarian kata kunci & nama lagu, kolom komentar, maupun
+              tangkapan layar kode QR secara utuh.
             </p>
           </div>
 
-          {/* 3 Mode Input Tabs — Flexible 3-Column Grid on Mobile & Desktop */}
+          {/* 4 Mode Input Tabs — Smooth Sliding Liquid Pill Indicator */}
           <div
             role="tablist"
             aria-label="Mode Ekstraksi Preset"
-            className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 rounded-xl glass-panel max-w-2xl"
+            {...liquidPointerHandlers}
+            className="relative z-10 p-1.5 rounded-2xl glass-panel transform-gpu max-w-3xl overflow-x-auto whitespace-nowrap flex-nowrap scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
           >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'url'}
-              onClick={() => {
-                setActiveTab('url');
-                resetUrlSearchResults();
-              }}
-              className={`min-h-[44px] px-2 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 cursor-pointer ${
-                activeTab === 'url'
-                  ? 'bg-[#00E5A3] text-slate-950 shadow-sm animate-state-pop'
-                  : 'text-slate-300 hover:text-white hover:bg-white/5'
-              }`}
+            <div
+              ref={tabSwitcherContainerRef}
+              className="relative flex sm:grid sm:grid-cols-4 items-center gap-1 min-w-max sm:min-w-0"
             >
-              <Link2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" aria-hidden="true" />
-              <span>
-                <span className="sr-only sm:not-sr-only">1. </span>URL Video
-              </span>
-            </button>
+              <div
+                aria-hidden="true"
+                data-testid="sliding-liquid-tab-pill"
+                style={{
+                  left: `${tabPillGeometry.left}px`,
+                  width: `${tabPillGeometry.width}px`,
+                  opacity: tabPillGeometry.ready ? 1 : 0,
+                  transform: `scale(${isSlidingPill ? 1.02 : 1})`,
+                }}
+                className="sliding-liquid-pill transform-gpu absolute inset-y-0 rounded-xl z-0"
+              />
 
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'text'}
-              onClick={() => {
-                setActiveTab('text');
-                resetTab2SearchResults();
-              }}
-              className={`min-h-[44px] px-2 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 cursor-pointer ${
-                activeTab === 'text'
-                  ? 'bg-[#00E5A3] text-slate-950 shadow-sm animate-state-pop'
-                  : 'text-slate-300 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <MessageSquareText className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" aria-hidden="true" />
-              <span>
-                <span className="sr-only sm:not-sr-only">2. </span>Komentar
-                <span className="sr-only sm:not-sr-only"> & Teks</span>
-              </span>
-            </button>
+              <button
+                ref={(el) => {
+                  tabButtonRefs.current[0] = el;
+                }}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'url'}
+                {...liquidPointerHandlers}
+                onPointerDown={(e) => {
+                  liquidPointerHandlers.onPointerDown(e);
+                  triggerPillSlideBounce();
+                }}
+                onClick={() => {
+                  handleSelectTab('url');
+                }}
+                className={`transform-gpu relative z-10 min-h-[44px] px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 cursor-pointer bg-transparent active:scale-95 transition-[transform,opacity,color,background-color] duration-300 ease-in-out ${
+                  activeTab === 'url'
+                    ? 'text-[#f1f5f9]'
+                    : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                }`}
+              >
+                <span>🔗 URL Video</span>
+              </button>
 
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'qr-image'}
-              onClick={() => setActiveTab('qr-image')}
-              className={`min-h-[44px] px-2 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 cursor-pointer ${
-                activeTab === 'qr-image'
-                  ? 'bg-[#00E5A3] text-slate-950 shadow-sm animate-state-pop'
-                  : 'text-slate-300 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <QrCode className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" aria-hidden="true" />
-              <span>
-                <span className="sr-only sm:not-sr-only">3. Scan </span>Gambar QR
-              </span>
-            </button>
+              <button
+                ref={(el) => {
+                  tabButtonRefs.current[1] = el;
+                }}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'keyword-search'}
+                {...liquidPointerHandlers}
+                onPointerDown={(e) => {
+                  liquidPointerHandlers.onPointerDown(e);
+                  triggerPillSlideBounce();
+                }}
+                onClick={() => {
+                  handleSelectTab('keyword-search');
+                }}
+                className={`transform-gpu relative z-10 min-h-[44px] px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 cursor-pointer bg-transparent active:scale-95 transition-[transform,opacity,color,background-color] duration-300 ease-in-out ${
+                  activeTab === 'keyword-search'
+                    ? 'text-[#f1f5f9]'
+                    : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                }`}
+              >
+                <span>🔍 Cari Preset</span>
+              </button>
+
+              <button
+                ref={(el) => {
+                  tabButtonRefs.current[2] = el;
+                }}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'text'}
+                {...liquidPointerHandlers}
+                onPointerDown={(e) => {
+                  liquidPointerHandlers.onPointerDown(e);
+                  triggerPillSlideBounce();
+                }}
+                onClick={() => {
+                  handleSelectTab('text');
+                }}
+                className={`transform-gpu relative z-10 min-h-[44px] px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 cursor-pointer bg-transparent active:scale-95 transition-[transform,opacity,color,background-color] duration-300 ease-in-out ${
+                  activeTab === 'text'
+                    ? 'text-[#f1f5f9]'
+                    : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                }`}
+              >
+                <MessageSquareText
+                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 transition-colors duration-300 ease-in-out ${
+                    activeTab === 'text' ? 'text-[#38bdf8]' : 'text-[#94a3b8]'
+                  }`}
+                  aria-hidden="true"
+                />
+                <span>Komentar & Teks</span>
+              </button>
+
+              <button
+                ref={(el) => {
+                  tabButtonRefs.current[3] = el;
+                }}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'qr-image'}
+                {...liquidPointerHandlers}
+                onPointerDown={(e) => {
+                  liquidPointerHandlers.onPointerDown(e);
+                  triggerPillSlideBounce();
+                }}
+                onClick={() => handleSelectTab('qr-image')}
+                className={`transform-gpu relative z-10 min-h-[44px] px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 cursor-pointer bg-transparent active:scale-95 transition-[transform,opacity,color,background-color] duration-300 ease-in-out ${
+                  activeTab === 'qr-image'
+                    ? 'text-[#f1f5f9]'
+                    : 'text-[#94a3b8] hover:text-[#f1f5f9]'
+                }`}
+              >
+                <QrCode
+                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 transition-colors duration-300 ease-in-out ${
+                    activeTab === 'qr-image'
+                      ? 'text-[#2dd4bf]'
+                      : 'text-[#94a3b8]'
+                  }`}
+                  aria-hidden="true"
+                />
+                <span>Scan Gambar QR</span>
+              </button>
+            </div>
           </div>
         </section>
 
@@ -993,26 +1340,33 @@ export default function App() {
             aria-label="Ekstraktor URL TikTok, Instagram, dan YouTube"
             className="space-y-5 sm:space-y-8 animate-state-enter"
           >
-            {/* Search Box & Pointers (Kolom Pencarian Beserta Penunjuknya) */}
-            <div className="glass-panel rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5">
+            {/* Search Box & Conditional Pointers with Bottom-Right Logo Watermark */}
+            <div
+              {...liquidPointerHandlers}
+              className="glass-panel transform-gpu rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-hidden"
+            >
+              {/* 2b) Card Bottom-Right Corner Watermark */}
+              <CardCornerWatermark />
+
               <form
                 onSubmit={handleUrlFormSubmit}
-                className="space-y-3 sm:space-y-3.5"
+                className="relative z-10 space-y-3 sm:space-y-3.5"
                 noValidate
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label
                     htmlFor="social-video-url-input"
-                    className="block text-xs sm:text-sm font-semibold text-white"
+                    className="block text-xs sm:text-sm font-semibold text-[#f1f5f9]"
                   >
                     Kolom Pencarian Tautan Video (TikTok, Instagram & YouTube)
                   </label>
 
-                  {hasSearchedUrl && (
+                  {canShowUrlResults && (
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={resetUrlSearchResults}
-                      className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer animate-state-pop"
+                      className="text-xs text-[#94a3b8] hover:text-[#2dd4bf] active:scale-95 flex items-center gap-1.5 transition-colors cursor-pointer animate-state-pop"
                     >
                       <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Sembunyikan Hasil</span>
@@ -1021,9 +1375,9 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                  <div className="relative flex-1 min-w-0 flex items-center">
+                  <div className="relative flex-1 min-w-0 flex items-center w-full">
                     <Link2
-                      className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                      className="w-4 h-4 text-[#38bdf8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10"
                       aria-hidden="true"
                     />
                     <input
@@ -1031,41 +1385,49 @@ export default function App() {
                       id="social-video-url-input"
                       type="url"
                       value={urlInput}
+                      {...liquidPointerHandlers}
+                      onPaste={() => {
+                        setHasPastedOrSearched(true);
+                      }}
                       onChange={(e) => {
-                        setUrlInput(e.target.value);
+                        const val = e.target.value;
+                        setUrlInput(val);
+                        if (val.trim()) {
+                          setHasPastedOrSearched(true);
+                        } else {
+                          setHasPastedOrSearched(false);
+                          setIsHistoryVisible(false);
+                        }
                         if (urlError) setUrlError(null);
                         if (hasSearchedUrl || currentVideoData) {
                           resetUrlSearchResults();
                         }
                       }}
                       placeholder="Tempel tautan TikTok, Instagram, atau YouTube di sini..."
-                      className={`w-full min-h-[46px] pl-10 ${
+                      className={`liquid-input w-full min-h-[46px] pl-10 ${
                         urlInput ? 'pr-10' : 'pr-4'
-                      } py-3 rounded-xl bg-slate-950/90 border border-white/15 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#00E5A3] font-mono`}
+                      } py-2.5 sm:py-3 rounded-xl text-base sm:text-sm text-[#f1f5f9] placeholder:text-[#94a3b8]/75 font-mono`}
                     />
                     {urlInput && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setUrlInput('');
-                          setUrlError(null);
-                          resetUrlSearchResults();
-                          urlInputRef.current?.focus();
-                        }}
+                        {...liquidPointerHandlers}
+                        onClick={handleClearUrlInputAndReset}
                         aria-label="Bersihkan kolom pencarian"
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer animate-state-pop"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-white/10 active:scale-95 transition-[transform,opacity,background-color,color] duration-200 ease-out cursor-pointer animate-state-pop"
                       >
                         <X className="w-4 h-4" aria-hidden="true" />
                       </button>
                     )}
                   </div>
 
-                  {/* Flexible 2-Column Button Grid on Mobile */}
+                  {/* Touch-Friendly 2-Column Button Grid on Mobile */}
                   <div className="grid grid-cols-2 sm:flex items-center gap-2 sm:gap-2.5 shrink-0">
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={handlePasteToUrlInput}
-                      className="min-h-[44px] px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-slate-100 font-semibold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+                      className="liquid-btn-secondary transform-gpu min-h-[44px] px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl active:scale-95 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       {pastedUrlFeedback ? (
                         <span
@@ -1073,10 +1435,10 @@ export default function App() {
                           className="animate-state-pop flex items-center gap-2"
                         >
                           <Check
-                            className="w-4 h-4 text-[#00E5A3]"
+                            className="w-4 h-4 text-[#10b981]"
                             aria-hidden="true"
                           />
-                          <span className="text-[#00E5A3]">Tertempel</span>
+                          <span className="text-[#2dd4bf]">Tertempel</span>
                         </span>
                       ) : (
                         <span
@@ -1084,7 +1446,7 @@ export default function App() {
                           className="animate-state-pop flex items-center gap-2"
                         >
                           <ClipboardPaste
-                            className="w-4 h-4 text-[#00E5A3]"
+                            className="w-4 h-4 text-[#38bdf8]"
                             aria-hidden="true"
                           />
                           <span>Tempel Tautan</span>
@@ -1095,7 +1457,8 @@ export default function App() {
                     <button
                       type="submit"
                       disabled={isLoadingUrl}
-                      className="min-h-[44px] px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl bg-[#00E5A3] text-slate-950 hover:bg-[#00cca0] disabled:opacity-60 font-semibold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+                      {...liquidPointerHandlers}
+                      className="liquid-btn-primary transform-gpu min-h-[44px] px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl active:scale-95 disabled:opacity-60 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       {isLoadingUrl ? (
                         <span
@@ -1103,17 +1466,20 @@ export default function App() {
                           className="animate-state-pop flex items-center gap-2"
                         >
                           <Loader2
-                            className="w-4 h-4 animate-spin"
+                            className="w-4 h-4 text-[#2dd4bf] animate-spin"
                             aria-hidden="true"
                           />
-                          <span>Mencari...</span>
+                          <span>Mencari link preset...</span>
                         </span>
                       ) : (
                         <span
                           key="search-url-idle"
                           className="animate-state-pop flex items-center gap-2"
                         >
-                          <Search className="w-4 h-4" aria-hidden="true" />
+                          <Search
+                            className="w-4 h-4 text-[#2dd4bf]"
+                            aria-hidden="true"
+                          />
                           <span>Cari Preset</span>
                         </span>
                       )}
@@ -1135,78 +1501,86 @@ export default function App() {
                 )}
               </form>
 
-              {/* Penunjuk Pencarian (Search Pointers / Instructions) — Flexible 3-Column Grid on Mobile with Verbose Text Hidden */}
-              <div className="pt-2 border-t border-white/[0.08] space-y-2">
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="font-semibold text-slate-300">
-                    Penunjuk Pencarian Preset:
-                  </span>
-                  {history.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowHistorySection((prev) => !prev)}
-                      className="text-xs text-[#00E5A3] hover:underline flex items-center gap-1 font-medium cursor-pointer"
+              {/* Petunjuk Pencarian Preset — ONLY visible when idle (before search starts / after X clear) */}
+              {isUrlTabIdle && (
+                <div className="relative z-10 pt-2 border-t border-white/[0.08] space-y-2.5 animate-expand-reveal">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-semibold text-[#f1f5f9]">
+                      Petunjuk Pencarian Preset:
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3">
+                    <div
+                      {...liquidPointerHandlers}
+                      className="glass-subpanel transform-gpu p-3 sm:p-3.5 rounded-xl flex flex-col justify-center space-y-1 text-left"
                     >
-                      <History className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>
-                        {showHistorySection
-                          ? 'Sembunyikan Riwayat'
-                          : `Lihat Riwayat (${history.length})`}
-                      </span>
-                    </button>
-                  )}
+                      <div className="text-xs font-semibold text-[#2dd4bf]">
+                        1. Tempel Tautan Video
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-[#94a3b8] leading-relaxed">
+                        Klik tombol{' '}
+                        <strong className="text-[#f1f5f9]">
+                          Tempel Tautan
+                        </strong>{' '}
+                        untuk memasukkan link video TikTok, Instagram Reels,
+                        atau YouTube.
+                      </p>
+                    </div>
+
+                    <div
+                      {...liquidPointerHandlers}
+                      className="glass-subpanel transform-gpu p-3 sm:p-3.5 rounded-xl flex flex-col justify-center space-y-1 text-left"
+                    >
+                      <div className="text-xs font-semibold text-[#38bdf8]">
+                        2. Tekan Cari Preset
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-[#94a3b8] leading-relaxed">
+                        Tekan tombol{' '}
+                        <strong className="text-[#f1f5f9]">Cari Preset</strong>{' '}
+                        untuk memindai deskripsi, caption, komentar, dan kode
+                        QR.
+                      </p>
+                    </div>
+
+                    <div
+                      {...liquidPointerHandlers}
+                      className="glass-subpanel transform-gpu p-3 sm:p-3.5 rounded-xl flex flex-col justify-center space-y-1 text-left"
+                    >
+                      <div className="text-xs font-semibold text-[#10b981]">
+                        3. Hasil Muncul & 4. Buka/Salin
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-[#94a3b8] leading-relaxed">
+                        Pemutar video, detail caption, dan tombol{' '}
+                        <strong className="text-[#f1f5f9]">Buka Preset</strong>{' '}
+                        / <strong className="text-[#f1f5f9]">Salin</strong> akan
+                        tampil setelah pencarian selesai.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-
-                <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                  <div className="glass-subpanel p-2.5 sm:p-3.5 rounded-xl flex flex-col justify-center space-y-1 text-center sm:text-left">
-                    <div className="text-[11px] sm:text-xs font-semibold text-[#00E5A3] whitespace-nowrap">
-                      1. Tempel <span className="sm:hidden">Link</span>
-                      <span className="hidden sm:inline">Tautan</span>
-                    </div>
-                    <p className="hidden sm:block text-xs text-slate-400 leading-relaxed">
-                      Klik tombol <strong>Tempel Tautan</strong> untuk memasukkan link video TikTok, Instagram Reels, atau YouTube.
-                    </p>
-                  </div>
-
-                  <div className="glass-subpanel p-2.5 sm:p-3.5 rounded-xl flex flex-col justify-center space-y-1 text-center sm:text-left">
-                    <div className="text-[11px] sm:text-xs font-semibold text-[#00E5A3] whitespace-nowrap">
-                      2. Tekan Cari
-                    </div>
-                    <p className="hidden sm:block text-xs text-slate-400 leading-relaxed">
-                      Tekan tombol <strong>Cari Preset</strong> untuk memindai deskripsi, caption, komentar, dan kode QR.
-                    </p>
-                  </div>
-
-                  <div className="glass-subpanel p-2.5 sm:p-3.5 rounded-xl flex flex-col justify-center space-y-1 text-center sm:text-left">
-                    <div className="text-[11px] sm:text-xs font-semibold text-[#00E5A3] whitespace-nowrap">
-                      3. Hasil Muncul
-                    </div>
-                    <p className="hidden sm:block text-xs text-slate-400 leading-relaxed">
-                      Bagian hasil pencarian baru akan ditampilkan di bawah setelah proses pencarian selesai.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
 
-            {/* Step-by-Step Loading Progress State — Flexible 2x2 Grid on Mobile */}
+            {/* Step-by-Step Loading Progress State ("Mencari link preset...") */}
             {isLoadingUrl && (
               <div
                 role="status"
                 aria-live="polite"
-                className="glass-panel rounded-2xl p-4 sm:p-6 space-y-3.5 sm:space-y-4 border border-[#00E5A3]/30 animate-state-enter"
+                {...liquidPointerHandlers}
+                className="glass-panel transform-gpu rounded-2xl p-4 sm:p-6 space-y-3.5 sm:space-y-4 animate-state-enter overflow-hidden"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs sm:text-sm font-semibold text-white truncate">
-                    {commentScanStatusText ||
-                      'Mengambil Video, Komentar & Mengekstrak Preset...'}
+                <CardCornerWatermark />
+                <div className="relative z-10 flex items-center justify-between gap-2">
+                  <span className="text-xs sm:text-sm font-semibold text-[#f1f5f9] truncate">
+                    {commentScanStatusText || 'Mencari link preset...'}
                   </span>
-                  <span className="text-xs font-mono tabular-nums text-[#00E5A3] shrink-0">
+                  <span className="text-xs font-mono tabular-nums text-[#2dd4bf] shrink-0">
                     Tahap {loadingStepIndex + 1} / {LOADING_STEPS.length}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+                <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                   {LOADING_STEPS.map((stepText, idx) => {
                     const isCompleted = idx < loadingStepIndex;
                     const isCurrent = idx === loadingStepIndex;
@@ -1214,26 +1588,26 @@ export default function App() {
                     return (
                       <div
                         key={stepText}
-                        className={`p-2.5 sm:p-3.5 rounded-xl border text-[11px] sm:text-xs flex items-center gap-2 transition-all duration-300 ${
+                        className={`glass-subpanel p-2.5 sm:p-3.5 rounded-xl text-[11px] sm:text-xs flex items-center gap-2 transition-[transform,opacity,background-color,border-color,color] duration-300 ease-out ${
                           isCurrent
-                            ? 'bg-[#00E5A3]/15 border-[#00E5A3]/50 text-white font-semibold animate-state-pop animate-live-pulse'
+                            ? 'text-[#f1f5f9] font-semibold animate-state-pop animate-live-pulse'
                             : isCompleted
-                            ? 'bg-slate-900/80 border-[#00E5A3]/30 text-[#00E5A3]'
-                            : 'bg-slate-950/50 border-white/10 text-slate-500'
+                            ? 'text-[#2dd4bf]'
+                            : 'text-[#94a3b8] opacity-75'
                         }`}
                       >
                         {isCompleted ? (
                           <CheckCircle2
-                            className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#00E5A3] shrink-0 animate-state-pop"
+                            className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#10b981] shrink-0 animate-state-pop"
                             aria-hidden="true"
                           />
                         ) : isCurrent ? (
                           <Loader2
-                            className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#00E5A3] animate-spin shrink-0"
+                            className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#38bdf8] animate-spin shrink-0"
                             aria-hidden="true"
                           />
                         ) : (
-                          <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border border-slate-700 inline-block shrink-0" />
+                          <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border border-[#94a3b8]/50 inline-block shrink-0" />
                         )}
                         <span className="leading-snug">{stepText}</span>
                       </div>
@@ -1243,10 +1617,9 @@ export default function App() {
               </div>
             )}
 
-            {/* Search Results Section — Strictly hidden until the Search button is pressed (hasSearchedUrl === true) */}
-            {!isLoadingUrl && hasSearchedUrl && currentVideoData && (
-              <div className="space-y-5 sm:space-y-8 animate-state-enter">
-                {/* Unified Video Player (Full Controls) & Video Caption Details Section */}
+            {/* Search Results Section (Only shown after search completes and input is non-empty) */}
+            {canShowUrlResults && currentVideoData && (
+              <div className="space-y-5 sm:space-y-8 animate-results-reveal">
                 <div className="animate-state-enter stagger-1">
                   <UnifiedVideoCaptionSection
                     videoData={currentVideoData}
@@ -1261,12 +1634,10 @@ export default function App() {
                   />
                 </div>
 
-                {/* Combined Extracted Preset Links */}
                 <div className="animate-state-enter stagger-2">
                   <PresetResultsList links={urlExtractedLinks} />
                 </div>
 
-                {/* Comments & Replies Preset Scanner Panel (TikTok or YouTube comments) */}
                 {(currentVideoData.platform === 'tiktok' ||
                   commentThreads.length > 0) && (
                   <div className="animate-state-enter stagger-3">
@@ -1296,7 +1667,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Auto Video QR Scanner (when direct video stream is available) */}
                 {currentVideoData.playUrl && (
                   <div className="animate-state-enter stagger-4">
                     <VideoQrScannerPanel
@@ -1309,46 +1679,71 @@ export default function App() {
               </div>
             )}
 
-            {/* Direct Link Extraction View (Only shown after pressing Search button) */}
-            {!isLoadingUrl && hasSearchedUrl && !currentVideoData && (
-              <div className="animate-state-enter">
+            {/* Direct Link Extraction View (Only shown after search completes and input is non-empty) */}
+            {canShowUrlResults && !currentVideoData && (
+              <div className="animate-results-reveal">
                 <PresetResultsList links={urlExtractedLinks} />
               </div>
             )}
           </section>
         )}
 
-        {/* TAB 2: KOMENTAR & TEKS (Unified Clean Surface) */}
+        {/* TAB 2: 🔍 CARI PRESET (KATA KUNCI & NAMA LAGU) */}
+        {activeTab === 'keyword-search' && (
+          <section
+            key="tab-keyword-search"
+            aria-label="Cari Preset Berdasarkan Kata Kunci, Nama Lagu, atau Kreator"
+            className="animate-state-enter"
+          >
+            <KeywordPresetSearchTab
+              onPresetFoundForHistory={handleKeywordPresetSavedToHistory}
+              onClearResetAll={() => {
+                setIsHistoryVisible(false);
+              }}
+            />
+          </section>
+        )}
+
+        {/* TAB 3: KOMENTAR & TEKS */}
         {activeTab === 'text' && (
           <section
             key="tab-text"
             aria-label="Filter Teks dan Pemindai Kolom Komentar TikTok dan YouTube"
             className="space-y-5 sm:space-y-8 animate-state-enter"
           >
-            <div className="glass-panel rounded-2xl p-4 sm:p-6 space-y-5 sm:space-y-6">
+            <div
+              {...liquidPointerHandlers}
+              className="glass-panel rounded-2xl p-4 sm:p-6 space-y-5 sm:space-y-6 overflow-hidden"
+            >
+              {/* 2b) Card Bottom-Right Corner Watermark */}
+              <CardCornerWatermark />
+
               {/* Part 1: Scan TikTok / YouTube Comments & Replies by Video Link */}
-              <div className="space-y-3">
+              <div className="relative z-10 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h2 className="text-xs sm:text-sm font-semibold text-white flex items-center gap-2">
+                    <h2 className="text-xs sm:text-sm font-semibold text-[#f1f5f9] flex items-center gap-2">
                       <MessageSquare
-                        className="w-4 h-4 text-[#00E5A3] shrink-0"
+                        className="w-4 h-4 text-[#2dd4bf] shrink-0"
                         aria-hidden="true"
                       />
                       <span>
-                        Pindai Kolom Komentar & Balasan dari Tautan Video TikTok / YouTube
+                        Pindai Kolom Komentar & Balasan dari Tautan Video TikTok
+                        / YouTube
                       </span>
                     </h2>
-                    <p className="hidden sm:block text-xs text-slate-400 mt-0.5">
-                      Tempel tautan video lalu tekan tombol Cari untuk mengekstrak tautan preset di kolom komentar.
+                    <p className="hidden sm:block text-xs text-[#94a3b8] mt-0.5">
+                      Tempel tautan video lalu tekan tombol Cari untuk
+                      mengekstrak tautan preset di kolom komentar.
                     </p>
                   </div>
 
-                  {(hasAnalyzedComment || tab2VideoMeta) && (
+                  {canShowTab2Results && (
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={resetTab2SearchResults}
-                      className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer animate-state-pop"
+                      className="text-xs text-[#94a3b8] hover:text-[#2dd4bf] active:scale-95 flex items-center gap-1.5 transition-colors cursor-pointer animate-state-pop"
                     >
                       <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Sembunyikan Hasil</span>
@@ -1369,7 +1764,7 @@ export default function App() {
                   </label>
                   <div className="relative flex-1 min-w-0 flex items-center">
                     <Link2
-                      className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                      className="w-4 h-4 text-[#38bdf8] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10"
                       aria-hidden="true"
                     />
                     <input
@@ -1377,29 +1772,42 @@ export default function App() {
                       id="tab2-tiktok-comment-url"
                       type="url"
                       value={tab2TiktokUrl}
+                      {...liquidPointerHandlers}
+                      onPaste={() => {
+                        setHasPastedOrSearched(true);
+                      }}
                       onChange={(e) => {
-                        setTab2TiktokUrl(e.target.value);
+                        const val = e.target.value;
+                        setTab2TiktokUrl(val);
+                        if (val.trim()) {
+                          setHasPastedOrSearched(true);
+                        }
                         if (commentError) setCommentError(null);
                         if (hasAnalyzedComment || tab2VideoMeta) {
                           resetTab2SearchResults();
                         }
                       }}
                       placeholder="https://vt.tiktok.com/... atau https://www.youtube.com/watch?v=..."
-                      className={`w-full min-h-[44px] pl-10 ${
+                      className={`liquid-input w-full min-h-[46px] pl-10 ${
                         tab2TiktokUrl ? 'pr-10' : 'pr-4'
-                      } py-2.5 rounded-xl bg-slate-950/90 border border-white/15 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#00E5A3] font-mono`}
+                      } py-2.5 sm:py-3 rounded-xl text-base sm:text-sm text-[#f1f5f9] placeholder:text-[#94a3b8]/75 font-mono`}
                     />
                     {tab2TiktokUrl && (
                       <button
                         type="button"
+                        {...liquidPointerHandlers}
                         onClick={() => {
                           setTab2TiktokUrl('');
                           setCommentError(null);
                           resetTab2SearchResults();
+                          if (!commentText.trim()) {
+                            setHasPastedOrSearched(false);
+                            setIsHistoryVisible(false);
+                          }
                           tab2UrlInputRef.current?.focus();
                         }}
                         aria-label="Bersihkan tautan video komentar"
-                        className="absolute right-2.5 p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center cursor-pointer animate-state-pop"
+                        className="absolute right-2.5 p-1 rounded-lg text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-white/10 active:scale-95 flex items-center justify-center cursor-pointer animate-state-pop"
                       >
                         <X className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
@@ -1409,8 +1817,9 @@ export default function App() {
                   <div className="grid grid-cols-2 sm:flex items-center gap-2 sm:gap-2.5 shrink-0">
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={handlePasteToTab2UrlInput}
-                      className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-slate-100 font-semibold text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                      className="liquid-btn-secondary transform-gpu min-h-[44px] px-3.5 py-2.5 rounded-xl active:scale-95 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       {pastedTab2UrlFeedback ? (
                         <span
@@ -1418,10 +1827,10 @@ export default function App() {
                           className="animate-state-pop flex items-center gap-1.5"
                         >
                           <Check
-                            className="w-3.5 h-3.5 text-[#00E5A3]"
+                            className="w-3.5 h-3.5 text-[#10b981]"
                             aria-hidden="true"
                           />
-                          <span className="text-[#00E5A3]">Tertempel</span>
+                          <span className="text-[#2dd4bf]">Tertempel</span>
                         </span>
                       ) : (
                         <span
@@ -1429,7 +1838,7 @@ export default function App() {
                           className="animate-state-pop flex items-center gap-1.5"
                         >
                           <ClipboardPaste
-                            className="w-3.5 h-3.5 text-[#00E5A3]"
+                            className="w-3.5 h-3.5 text-[#38bdf8]"
                             aria-hidden="true"
                           />
                           <span>Tempel Tautan</span>
@@ -1440,7 +1849,8 @@ export default function App() {
                     <button
                       type="submit"
                       disabled={isScanningComments}
-                      className="min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl bg-[#00E5A3] text-slate-950 hover:bg-[#00cca0] disabled:opacity-60 font-semibold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+                      {...liquidPointerHandlers}
+                      className="liquid-btn-primary transform-gpu min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl active:scale-95 disabled:opacity-60 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       {isScanningComments ? (
                         <span
@@ -1448,17 +1858,20 @@ export default function App() {
                           className="animate-state-pop flex items-center gap-2"
                         >
                           <Loader2
-                            className="w-4 h-4 animate-spin"
+                            className="w-4 h-4 text-[#2dd4bf] animate-spin"
                             aria-hidden="true"
                           />
-                          <span>Mencari...</span>
+                          <span>Mencari link preset...</span>
                         </span>
                       ) : (
                         <span
                           key="tab2-scan-idle"
                           className="animate-state-pop flex items-center gap-2"
                         >
-                          <Search className="w-4 h-4" aria-hidden="true" />
+                          <Search
+                            className="w-4 h-4 text-[#2dd4bf]"
+                            aria-hidden="true"
+                          />
                           <span>Cari Komentar</span>
                         </span>
                       )}
@@ -1468,18 +1881,18 @@ export default function App() {
               </div>
 
               {/* Hairline Divider */}
-              <div className="border-t border-white/[0.08]" />
+              <div className="relative z-10 border-t border-white/[0.08]" />
 
               {/* Part 2: Manual Paste Comment / Reply Text Filter */}
               <form
                 onSubmit={handleAnalyzeCommentSubmit}
-                className="space-y-3"
+                className="relative z-10 space-y-3"
                 noValidate
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label
                     htmlFor="comment-filter-textarea"
-                    className="text-xs sm:text-sm font-semibold text-white"
+                    className="text-xs sm:text-sm font-semibold text-[#f1f5f9]"
                   >
                     Atau Tempel Teks Komentar / Deskripsi Manual
                   </label>
@@ -1487,8 +1900,9 @@ export default function App() {
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
+                      {...liquidPointerHandlers}
                       onClick={handlePasteToCommentTextarea}
-                      className="text-xs font-semibold text-[#00E5A3] hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-xs font-semibold text-[#2dd4bf] hover:underline active:scale-95 flex items-center gap-1 cursor-pointer"
                     >
                       {pastedCommentTextFeedback ? (
                         <span
@@ -1515,12 +1929,17 @@ export default function App() {
                     {commentText && (
                       <button
                         type="button"
+                        {...liquidPointerHandlers}
                         onClick={() => {
                           setCommentText('');
                           setHasAnalyzedComment(false);
                           setCommentError(null);
+                          if (!tab2TiktokUrl.trim()) {
+                            setHasPastedOrSearched(false);
+                            setIsHistoryVisible(false);
+                          }
                         }}
-                        className="text-xs text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer animate-state-pop"
+                        className="text-xs text-[#94a3b8] hover:text-[#f1f5f9] active:scale-95 flex items-center gap-1 cursor-pointer animate-state-pop"
                       >
                         <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                         <span>Bersihkan</span>
@@ -1534,15 +1953,23 @@ export default function App() {
                   id="comment-filter-textarea"
                   rows={3}
                   value={commentText}
+                  {...liquidPointerHandlers}
+                  onPaste={() => {
+                    setHasPastedOrSearched(true);
+                  }}
                   onChange={(e) => {
-                    setCommentText(e.target.value);
+                    const val = e.target.value;
+                    setCommentText(val);
+                    if (val.trim()) {
+                      setHasPastedOrSearched(true);
+                    }
                     if (commentError) setCommentError(null);
                     if (hasAnalyzedComment) {
                       setHasAnalyzedComment(false);
                     }
                   }}
                   placeholder="Tempelkan salinan komentar atau deskripsi YouTube/TikTok/IG di sini... (Contoh: https://alight.link/... atau https://drive.google.com/file/...)"
-                  className="w-full p-3.5 sm:p-4 rounded-xl bg-slate-950/90 border border-white/15 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-[#00E5A3] font-mono leading-relaxed"
+                  className="liquid-input w-full p-3.5 sm:p-4 rounded-xl text-base sm:text-sm text-[#f1f5f9] placeholder:text-[#94a3b8]/75 font-mono leading-relaxed"
                 />
 
                 {commentError && (
@@ -1561,78 +1988,105 @@ export default function App() {
                 <div className="flex items-center justify-end">
                   <button
                     type="submit"
-                    className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+                    {...liquidPointerHandlers}
+                    className="liquid-btn-secondary transform-gpu w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-xl active:scale-95 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
                   >
-                    <Search className="w-4 h-4 text-[#00E5A3]" aria-hidden="true" />
+                    <Search
+                      className="w-4 h-4 text-[#2dd4bf]"
+                      aria-hidden="true"
+                    />
                     <span>Cari Link AM dari Teks</span>
                   </button>
                 </div>
               </form>
 
-              {/* Penunjuk Pencarian Komentar & Teks — Flexible 2-Column Grid on Mobile */}
-              <div className="pt-2 border-t border-white/[0.08] grid grid-cols-2 gap-2 sm:gap-3">
-                <div className="glass-subpanel p-2.5 sm:p-3.5 rounded-xl space-y-1 text-center sm:text-left">
-                  <div className="text-[11px] sm:text-xs font-semibold text-[#00E5A3]">
-                    1. Via Tautan Video
+              {/* Petunjuk Pencarian Komentar & Teks — ONLY visible when idle */}
+              {isTab2Idle && (
+                <div className="relative z-10 pt-2 border-t border-white/[0.08] grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3 animate-expand-reveal">
+                  <div
+                    {...liquidPointerHandlers}
+                    className="glass-subpanel transform-gpu p-3 sm:p-3.5 rounded-xl space-y-1 text-left"
+                  >
+                    <div className="text-xs font-semibold text-[#2dd4bf]">
+                      1. Via Tautan Video
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-[#94a3b8] leading-relaxed">
+                      Klik{' '}
+                      <strong className="text-[#f1f5f9]">Tempel Tautan</strong>{' '}
+                      lalu tekan{' '}
+                      <strong className="text-[#f1f5f9]">Cari Komentar</strong>{' '}
+                      untuk memindai komentar dan balasan video TikTok atau
+                      YouTube.
+                    </p>
                   </div>
-                  <p className="hidden sm:block text-xs text-slate-400 leading-relaxed">
-                    Klik <strong>Tempel Tautan</strong> lalu tekan <strong>Cari Komentar</strong> untuk memindai komentar dan balasan video TikTok atau YouTube.
-                  </p>
-                </div>
-                <div className="glass-subpanel p-2.5 sm:p-3.5 rounded-xl space-y-1 text-center sm:text-left">
-                  <div className="text-[11px] sm:text-xs font-semibold text-[#00E5A3]">
-                    2. Filter Teks Manual
+                  <div
+                    {...liquidPointerHandlers}
+                    className="glass-subpanel transform-gpu p-3 sm:p-3.5 rounded-xl space-y-1 text-left"
+                  >
+                    <div className="text-xs font-semibold text-[#38bdf8]">
+                      2. Filter Teks Manual
+                    </div>
+                    <p className="text-[11px] sm:text-xs text-[#94a3b8] leading-relaxed">
+                      Klik{' '}
+                      <strong className="text-[#f1f5f9]">Tempel Teks</strong>{' '}
+                      lalu tekan{' '}
+                      <strong className="text-[#f1f5f9]">
+                        Cari Link AM dari Teks
+                      </strong>{' '}
+                      untuk mengekstrak seluruh tautan preset di dalam teks
+                      panjang.
+                    </p>
                   </div>
-                  <p className="hidden sm:block text-xs text-slate-400 leading-relaxed">
-                    Klik <strong>Tempel Teks</strong> lalu tekan <strong>Cari Link AM dari Teks</strong> untuk mengekstrak seluruh tautan preset di dalam teks panjang.
-                  </p>
                 </div>
-              </div>
+              )}
             </div>
 
-            {hasAnalyzedComment && (
-              <div className="animate-state-enter stagger-1">
+            {canShowTab2Results && (
+              <div className="animate-results-reveal stagger-1">
                 <PresetResultsList links={commentExtractedLinks} />
               </div>
             )}
 
-            {(isScanningComments ||
-              (hasAnalyzedComment &&
-                (commentThreads.length > 0 || tab2VideoMeta))) && (
-              <div className="animate-state-enter stagger-2">
-                <TikTokCommentsScannerPanel
-                  platform={(tab2VideoMeta || currentVideoData)?.platform || 'tiktok'}
-                  videoId={(tab2VideoMeta || currentVideoData)?.id || ''}
-                  sourceUrl={
-                    (tab2VideoMeta || currentVideoData)?.sourceUrl ||
-                    tab2TiktokUrl
-                  }
-                  creatorUniqueId={
-                    (tab2VideoMeta || currentVideoData)?.author.uniqueId || ''
-                  }
-                  threads={commentThreads}
-                  cursor={commentsCursor}
-                  hasMore={commentsHasMore}
-                  isScanningInitial={isScanningComments}
-                  scanStatusText={commentScanStatusText}
-                  scanError={commentScanError}
-                  onThreadsUpdated={handleThreadsUpdatedFromPanel}
-                  onRetryInitialScan={() => {
-                    const target =
-                      tab2TiktokUrl ||
-                      (tab2VideoMeta || currentVideoData)?.sourceUrl ||
-                      '';
-                    if (target) {
-                      handleScanTiktokCommentsInTab2(target);
+            {hasPastedOrSearched &&
+              (isScanningComments ||
+                (canShowTab2Results &&
+                  (commentThreads.length > 0 || tab2VideoMeta))) && (
+                <div className="animate-results-reveal stagger-2">
+                  <TikTokCommentsScannerPanel
+                    platform={
+                      (tab2VideoMeta || currentVideoData)?.platform || 'tiktok'
                     }
-                  }}
-                />
-              </div>
-            )}
+                    videoId={(tab2VideoMeta || currentVideoData)?.id || ''}
+                    sourceUrl={
+                      (tab2VideoMeta || currentVideoData)?.sourceUrl ||
+                      tab2TiktokUrl
+                    }
+                    creatorUniqueId={
+                      (tab2VideoMeta || currentVideoData)?.author.uniqueId || ''
+                    }
+                    threads={commentThreads}
+                    cursor={commentsCursor}
+                    hasMore={commentsHasMore}
+                    isScanningInitial={isScanningComments}
+                    scanStatusText={commentScanStatusText}
+                    scanError={commentScanError}
+                    onThreadsUpdated={handleThreadsUpdatedFromPanel}
+                    onRetryInitialScan={() => {
+                      const target =
+                        tab2TiktokUrl ||
+                        (tab2VideoMeta || currentVideoData)?.sourceUrl ||
+                        '';
+                      if (target) {
+                        handleScanTiktokCommentsInTab2(target);
+                      }
+                    }}
+                  />
+                </div>
+              )}
           </section>
         )}
 
-        {/* TAB 3: SCAN GAMBAR QR */}
+        {/* TAB 4: SCAN GAMBAR QR */}
         {activeTab === 'qr-image' && (
           <section
             key="tab-qr-image"
@@ -1643,44 +2097,53 @@ export default function App() {
           </section>
         )}
 
-        {/* RIWAYAT PRESET (LOCALSTORAGE) — Only shown when toggled or after user explicitly requests it */}
-        {showHistorySection && (
-          <div className="animate-state-enter">
+        {/* RIWAYAT PRESET (LOCALSTORAGE) — Hidden by default until explicitly opened */}
+        {isHistoryVisible && (
+          <div className="animate-results-reveal">
             <PresetHistorySection
               history={history}
               onDeleteRecord={handleDeleteHistoryItem}
               onClearAll={handleClearAllHistory}
+              onCloseHistory={() => setIsHistoryVisible(false)}
             />
           </div>
         )}
       </main>
 
-      {/* Modern Structured Footer with Flexible Mobile Grid */}
-      <footer className="relative z-10 border-t border-white/[0.08] bg-[#070A12] mt-10 sm:mt-16">
+      {/* Modern Structured Footer (Semi-Transparent Dark Slate, Zero Backdrop-Blur) */}
+      <footer className="relative z-10 border-t border-cyan-500/20 bg-slate-950/95 mt-10 sm:mt-16">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-6 sm:space-y-10">
           <div className="grid grid-cols-2 lg:grid-cols-12 gap-6 sm:gap-8">
             {/* Column 1: Brand & Developer Profile */}
             <div className="col-span-2 lg:col-span-5 space-y-2.5 sm:space-y-3">
-              <div className="text-base font-bold text-white font-display tracking-tight">
-                AM Preset Finder
+              <div className="flex items-center gap-2 text-base font-bold font-display tracking-tight">
+                <img
+                  src="/favicon.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="w-5 h-5 rounded-full object-cover border border-white/10"
+                />
+                <span className="text-liquid-gradient">AM Preset Finder</span>
               </div>
-              <p className="hidden sm:block text-xs text-slate-400 leading-relaxed max-w-sm">
-                Platform ekstraktor tautan preset Alight Motion (5MB, XML & Kode QR) dari video, deskripsi, kolom komentar, dan balasan TikTok, Instagram, maupun YouTube.
+              <p className="hidden sm:block text-xs text-[#94a3b8] leading-relaxed max-w-sm">
+                Platform ekstraktor tautan preset Alight Motion (5MB, XML & Kode
+                QR) dari video, pencarian kata kunci & lagu, kolom komentar, dan
+                balasan TikTok, Instagram, maupun YouTube.
               </p>
-              <div className="pt-0.5 sm:pt-1 text-xs text-slate-300 flex flex-wrap sm:flex-col items-center sm:items-start gap-x-4 gap-y-1">
+              <div className="pt-0.5 sm:pt-1 text-xs text-[#94a3b8] flex flex-wrap sm:flex-col items-center sm:items-start gap-x-4 gap-y-1">
                 <div>
                   Pengembang:{' '}
-                  <strong className="text-white font-semibold">
+                  <strong className="text-[#f1f5f9] font-semibold">
                     Dimas Kurniawan
                   </strong>
                 </div>
-                <div className="flex items-center gap-1.5 text-slate-400">
+                <div className="flex items-center gap-1.5 text-[#94a3b8]">
                   <span>TikTok:</span>
                   <a
                     href={TIKTOK_CONTACT_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[#00E5A3] hover:underline font-mono inline-flex items-center gap-1"
+                    className="text-[#2dd4bf] hover:underline font-mono inline-flex items-center gap-1"
                   >
                     <span>@ludexkurniawan</span>
                     <ExternalLink className="w-3 h-3" aria-hidden="true" />
@@ -1691,19 +2154,22 @@ export default function App() {
 
             {/* Column 2: Support (SociaBuzz & Saluran WhatsApp) */}
             <div className="col-span-1 lg:col-span-4 space-y-2.5 sm:space-y-3 min-w-0">
-              <h3 className="text-xs font-semibold text-white tracking-wide">
+              <h3 className="text-xs font-semibold text-[#f1f5f9] tracking-wide">
                 Support
               </h3>
-              <ul className="space-y-2 sm:space-y-2.5 text-xs text-slate-400">
+              <ul className="space-y-2 sm:space-y-2.5 text-xs text-[#94a3b8]">
                 <li>
                   <a
                     href={SOCIABUZZ_SUPPORT_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[#00E5A3] hover:underline font-semibold transition-colors inline-flex items-center gap-1.5"
+                    className="text-[#2dd4bf] hover:underline font-semibold transition-colors inline-flex items-center gap-1.5"
                   >
                     <span>Beri Dukungan (SociaBuzz)</span>
-                    <ExternalLink className="w-3 h-3 text-[#00E5A3] shrink-0" aria-hidden="true" />
+                    <ExternalLink
+                      className="w-3 h-3 text-[#2dd4bf] shrink-0"
+                      aria-hidden="true"
+                    />
                   </a>
                 </li>
                 <li>
@@ -1711,10 +2177,13 @@ export default function App() {
                     href={WHATSAPP_CHANNEL_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-slate-200 hover:text-[#00E5A3] font-medium transition-colors inline-flex items-center gap-1.5"
+                    className="text-[#f1f5f9] hover:text-[#38bdf8] font-medium transition-colors inline-flex items-center gap-1.5"
                   >
                     <span>Saluran WhatsApp</span>
-                    <ExternalLink className="w-3 h-3 text-[#00E5A3] shrink-0" aria-hidden="true" />
+                    <ExternalLink
+                      className="w-3 h-3 text-[#38bdf8] shrink-0"
+                      aria-hidden="true"
+                    />
                   </a>
                 </li>
                 <li className="hidden sm:list-item">
@@ -1722,10 +2191,13 @@ export default function App() {
                     href={WHATSAPP_CHANNEL_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-slate-300 hover:text-[#00E5A3] transition-colors inline-flex items-center gap-1.5"
+                    className="text-[#94a3b8] hover:text-[#2dd4bf] transition-colors inline-flex items-center gap-1.5"
                   >
                     <span>Gabung Saluran WhatsApp Resmi</span>
-                    <ExternalLink className="w-3 h-3 shrink-0" aria-hidden="true" />
+                    <ExternalLink
+                      className="w-3 h-3 shrink-0"
+                      aria-hidden="true"
+                    />
                   </a>
                 </li>
                 <li>
@@ -1733,10 +2205,13 @@ export default function App() {
                     href={TIKTOK_CONTACT_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-slate-300 hover:text-[#00E5A3] transition-colors inline-flex items-center gap-1.5"
+                    className="text-[#94a3b8] hover:text-[#2dd4bf] transition-colors inline-flex items-center gap-1.5"
                   >
                     <span>TikTok @ludexkurniawan</span>
-                    <ExternalLink className="w-3 h-3 shrink-0" aria-hidden="true" />
+                    <ExternalLink
+                      className="w-3 h-3 shrink-0"
+                      aria-hidden="true"
+                    />
                   </a>
                 </li>
               </ul>
@@ -1744,15 +2219,15 @@ export default function App() {
 
             {/* Column 3: Legal (Terms of Service & Privacy Policy) */}
             <div className="col-span-1 lg:col-span-3 space-y-2.5 sm:space-y-3">
-              <h3 className="text-xs font-semibold text-white tracking-wide">
+              <h3 className="text-xs font-semibold text-[#f1f5f9] tracking-wide">
                 Legal
               </h3>
-              <ul className="space-y-2 sm:space-y-2.5 text-xs text-slate-400">
+              <ul className="space-y-2 sm:space-y-2.5 text-xs text-[#94a3b8]">
                 <li>
                   <button
                     type="button"
                     onClick={() => setActiveLegalDoc('tos')}
-                    className="text-slate-300 hover:text-[#00E5A3] transition-colors cursor-pointer"
+                    className="text-[#94a3b8] hover:text-[#2dd4bf] transition-colors cursor-pointer"
                   >
                     Terms of Service
                   </button>
@@ -1761,7 +2236,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setActiveLegalDoc('privacy')}
-                    className="text-slate-300 hover:text-[#00E5A3] transition-colors cursor-pointer"
+                    className="text-[#94a3b8] hover:text-[#2dd4bf] transition-colors cursor-pointer"
                   >
                     Privacy Policy
                   </button>
@@ -1770,7 +2245,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setShowWelcomeModal(true)}
-                    className="text-slate-300 hover:text-[#00E5A3] transition-colors cursor-pointer"
+                    className="text-[#94a3b8] hover:text-[#2dd4bf] transition-colors cursor-pointer"
                   >
                     Info & Dukungan Aplikasi
                   </button>
@@ -1780,10 +2255,10 @@ export default function App() {
           </div>
 
           {/* Bottom Copyright & Attribution Bar */}
-          <div className="pt-5 sm:pt-6 border-t border-white/[0.08] flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 text-xs text-slate-400 text-center sm:text-left">
+          <div className="pt-5 sm:pt-6 border-t border-white/[0.08] flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 text-xs text-[#94a3b8] text-center sm:text-left">
             <div>
               © {new Date().getFullYear()} AM Preset Finder · Hak Cipta{' '}
-              <strong className="text-slate-200 font-medium">
+              <strong className="text-[#f1f5f9] font-medium">
                 Dimas Kurniawan
               </strong>
               . Seluruh hak cipta dilindungi.
@@ -1793,7 +2268,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setActiveLegalDoc('tos')}
-                className="hover:text-white transition-colors cursor-pointer"
+                className="hover:text-[#f1f5f9] transition-colors cursor-pointer"
               >
                 Terms of Service
               </button>
@@ -1801,7 +2276,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setActiveLegalDoc('privacy')}
-                className="hover:text-white transition-colors cursor-pointer"
+                className="hover:text-[#f1f5f9] transition-colors cursor-pointer"
               >
                 Privacy Policy
               </button>
@@ -1810,7 +2285,7 @@ export default function App() {
                 href={SOCIABUZZ_SUPPORT_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[#00E5A3] hover:underline font-medium"
+                className="text-[#2dd4bf] hover:underline font-medium"
               >
                 Beri Dukungan
               </a>
@@ -1819,7 +2294,7 @@ export default function App() {
                 href={WHATSAPP_CHANNEL_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[#00E5A3] hover:underline font-medium"
+                className="text-[#38bdf8] hover:underline font-medium"
               >
                 Saluran WhatsApp
               </a>
@@ -1828,13 +2303,33 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Aesthetic Welcome Popup Modal on Initial Page Load */}
+      {/* Initial Page Load Splash Screen (1.5 - 2s with smooth fade-out) */}
+      <InitialLoadingScreen />
+
+      {/* Search / Link Extraction Loading Overlay */}
+      <SearchLoadingOverlay
+        isOpen={isLoadingUrl || isScanningComments}
+        customStatusText={
+          isScanningComments
+            ? commentScanStatusText || 'Memindai komentar & balasan TikTok...'
+            : undefined
+        }
+        targetLabel={
+          isLoadingUrl && urlInput.trim()
+            ? urlInput.trim()
+            : isScanningComments && tab2TiktokUrl.trim()
+              ? tab2TiktokUrl.trim()
+              : undefined
+        }
+      />
+
+      {/* Welcome Popup Modal on Initial Page Load */}
       <WelcomeModal
         isOpen={showWelcomeModal}
         onClose={() => setShowWelcomeModal(false)}
       />
 
-      {/* Interactive Legal Modal (Terms of Service & Privacy Policy) */}
+      {/* Interactive Legal Modal */}
       <LegalModal
         activeDoc={activeLegalDoc}
         onSelectDoc={(doc) => setActiveLegalDoc(doc)}
