@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
           {
             parts: [
               {
-                text: `Berikan rekomendasi preset Alight Motion terkait kata kunci: "${q}".`
+               text: `Berikan rekomendasi preset Alight Motion untuk "${q}". Wajib sertakan contoh link impor: https://alight.link/preset dan tautan Google Drive https://drive.google.com/file/d/sample agar preset terbaca.`
               }
             ]
           }
